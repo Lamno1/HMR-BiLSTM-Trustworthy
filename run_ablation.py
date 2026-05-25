@@ -8,16 +8,18 @@ Các variant:
     no_rmc      — bỏ RMC path, c_t = c_lstm  ← QUAN TRỌNG NHẤT
     no_cnn      — bỏ CNN, raw ECG đi thẳng vào BiRLSTM
     mean_pool   — thay AttentionPooling bằng mean pooling
+    no_smooth   — lambda_smooth=0 (tắt temporal smoothness loss)
+    no_adv      — adversarial_training=False (train trên clean data)
 
 Cách chạy:
-    # Chạy tất cả 4 variants (mất nhiều thời gian):
+    # Chạy tất cả 6 variants:
     python run_ablation.py
 
     # Chỉ chạy variant quan trọng nhất:
     python run_ablation.py --variants no_rmc
 
-    # Chạy 2 variants:
-    python run_ablation.py --variants no_rmc no_cnn
+    # Chạy 2 variant mới:
+    python run_ablation.py --variants no_smooth no_adv
 
     # Bỏ qua training, chỉ generate bảng từ checkpoint có sẵn:
     python run_ablation.py --table-only
@@ -74,7 +76,10 @@ BASE_CONFIG = {
     "use_class_weights":       True,
 }
 
-# Định nghĩa 4 variants
+# Định nghĩa 6 variants
+# Các key model flags (use_rmc, use_cnn, use_attention) điều khiển kiến trúc.
+# Key "override_config" (optional) ghi đè lên BASE_CONFIG trước khi train —
+# dùng cho no_smooth và no_adv mà không cần thay đổi kiến trúc model.
 VARIANTS = {
     "full": {
         "use_rmc": True, "use_cnn": True, "use_attention": True,
@@ -91,6 +96,24 @@ VARIANTS = {
     "mean_pool": {
         "use_rmc": True, "use_cnn": True, "use_attention": False,
         "label": "Mean-Pool (no attention)",
+    },
+    "no_smooth": {
+        "use_rmc": True, "use_cnn": True, "use_attention": True,
+        "label": "No-Smoothness (lambda=0)",
+        "override_config": {"lambda_smooth": 0.0},
+    },
+    "no_adv": {
+        "use_rmc": True, "use_cnn": True, "use_attention": True,
+        "label": "No-Adv-Training",
+        "override_config": {"adversarial_training": False},
+    },
+    "no_hybrid": {
+        # RMC vẫn chạy nhưng bỏ beta-gated blending → c_t = c_rmc
+        # Khác No-RMC: No-RMC bỏ cả RMC (c_t=c_lstm)
+        #              No-Hybrid bỏ LSTM backup (c_t=c_rmc, beta=1 cố định)
+        "use_rmc": True, "use_cnn": True, "use_attention": True,
+        "use_hybrid": False,
+        "label": "No-Hybrid-Path (c_t = c_rmc)",
     },
 }
 
@@ -225,11 +248,20 @@ def train_variant(variant_name, variant_flags, cfg, device,
                   train_loader, val_loader, test_loader,
                   class_weights, out_dir):
     label = variant_flags["label"]
+
+    # Áp dụng override_config lên bản sao local của cfg.
+    # QUAN TRỌNG: dùng bản sao để không ảnh hưởng đến các variant khác
+    # chạy sau trong cùng session.
+    cfg = {**cfg, **variant_flags.get("override_config", {})}
+
     print(f"\n{'='*60}")
     print(f"  Variant: {label}")
     print(f"  use_rmc={variant_flags['use_rmc']}  "
           f"use_cnn={variant_flags['use_cnn']}  "
           f"use_attention={variant_flags['use_attention']}")
+    # In override nếu có để dễ debug
+    if "override_config" in variant_flags:
+        print(f"  override_config={variant_flags['override_config']}")
     print(f"{'='*60}")
 
     set_seed(cfg["seed"])
@@ -242,6 +274,7 @@ def train_variant(variant_name, variant_flags, cfg, device,
         cnn_out_channels=cfg["cnn_out_channels"],
         num_layers=cfg["num_layers"],
         use_rmc=variant_flags["use_rmc"],
+        use_hybrid=variant_flags.get("use_hybrid", True),  # default True
         use_cnn=variant_flags["use_cnn"],
         use_attention=variant_flags["use_attention"],
     ).to(device)
@@ -436,9 +469,11 @@ def main():
     parser = argparse.ArgumentParser(description="HMR-BiLSTM Ablation Study")
     parser.add_argument(
         "--variants", nargs="*",
-        choices=["full", "no_rmc", "no_cnn", "mean_pool"],
-        default=["full", "no_rmc", "no_cnn", "mean_pool"],
-        help="Variants to train. Default: all 4.",
+        choices=["full", "no_rmc", "no_cnn", "mean_pool",
+                 "no_smooth", "no_adv", "no_hybrid"],
+        default=["full", "no_rmc", "no_cnn", "mean_pool",
+                 "no_smooth", "no_adv", "no_hybrid"],
+        help="Variants to train. Default: all 7.",
     )
     parser.add_argument(
         "--table-only", action="store_true",

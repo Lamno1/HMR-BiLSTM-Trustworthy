@@ -71,26 +71,29 @@ class AttentionPooling(nn.Module):
 # =============================================================================
 class RLSTMCell(nn.Module):
     """
-    HMR-BiLSTM cell với ablation flag use_rmc.
+    HMR-BiLSTM cell với 2 ablation flags độc lập:
 
-    use_rmc=True  (default): full Hybrid Memory Path
+    use_rmc=True, use_hybrid=True  (default): full Hybrid Memory Path
         c_t = beta * c_rmc + (1-beta) * c_lstm
+
+    use_rmc=True, use_hybrid=False  (No-Hybrid-Path ablation):
+        c_t = c_rmc  (beta=1 cố định, bỏ LSTM branch khỏi blend)
+        Chứng minh beta-gated blending có cần thiết không.
+        Khác với No-RMC: RMC vẫn chạy, chỉ bỏ LSTM backup path.
 
     use_rmc=False (No-RMC ablation): bỏ toàn bộ RMC path
         c_t = c_lstm  (tương đương BiLSTM thuần với CNN + Attention)
-        Các weight W_c, W_h_rmc, W_alpha, W_beta vẫn được tạo nhưng
-        không được dùng trong forward → tránh thay đổi param count một
-        cách đột ngột gây so sánh không fair. (Nếu muốn fair param count
-        thực sự, dùng use_rmc=False kết hợp với exclude_rmc_params=True
-        trong optimizer — nhưng với ablation đơn giản thì không cần.)
+        use_hybrid bị bỏ qua khi use_rmc=False.
     """
 
     def __init__(self, input_size: int, hidden_size: int,
-                 dropout: float = 0.1, use_rmc: bool = True):
+                 dropout: float = 0.1, use_rmc: bool = True,
+                 use_hybrid: bool = True):
         super().__init__()
         self.input_size  = input_size
         self.hidden_size = hidden_size
         self.use_rmc     = use_rmc
+        self.use_hybrid  = use_hybrid  # chỉ có hiệu lực khi use_rmc=True
 
         # LSTM gates (luôn có)
         self.W_x = nn.Linear(input_size,  4 * hidden_size)
@@ -165,11 +168,16 @@ class RLSTMCell(nn.Module):
             alpha    = F.softmax(scores, dim=-1)
             c_rmc    = alpha[:, 0:1] * c_keep + alpha[:, 1:2] * c_add
 
-            # === Bước 5c: Blend gate ===
-            beta = torch.sigmoid(self.W_beta(h_prev))
-
-            # === Bước 5d: Hybrid output ===
-            c_t = beta * c_rmc + (1.0 - beta) * c_lstm
+            # === Bước 5c+d: Blend gate — có hoặc không có Hybrid Path ===
+            if self.use_hybrid:
+                # Full model: beta gate học được, blend RMC và LSTM
+                beta = torch.sigmoid(self.W_beta(h_prev))
+                c_t  = beta * c_rmc + (1.0 - beta) * c_lstm
+            else:
+                # No-Hybrid-Path: bỏ LSTM backup, chỉ dùng RMC
+                # Tương đương beta=1 cố định — W_beta không được dùng
+                beta = torch.ones_like(c_rmc)  # placeholder cho log
+                c_t  = c_rmc
 
             # Lưu cho interpretability
             self.last_r_t    = r_t
@@ -201,11 +209,13 @@ class RLSTMCell(nn.Module):
 #  HMR-BiLSTM LAYER (không đổi interface, chỉ pass use_rmc xuống cell)
 # =============================================================================
 class RLSTMLayer(nn.Module):
-    def __init__(self, input_size, hidden_size, dropout=0.1, use_rmc=True):
+    def __init__(self, input_size, hidden_size, dropout=0.1,
+                 use_rmc=True, use_hybrid=True):
         super().__init__()
         self.hidden_size = hidden_size
         self.cell = RLSTMCell(input_size, hidden_size,
-                              dropout=dropout, use_rmc=use_rmc)
+                              dropout=dropout, use_rmc=use_rmc,
+                              use_hybrid=use_hybrid)
 
     def forward(self, x, h0=None, c0=None):
         B, T, _ = x.size()
@@ -235,7 +245,7 @@ class RLSTMLayer(nn.Module):
 # =============================================================================
 class BiRLSTM(nn.Module):
     def __init__(self, input_size, hidden_size,
-                 num_layers=1, dropout=0.1, use_rmc=True):
+                 num_layers=1, dropout=0.1, use_rmc=True, use_hybrid=True):
         super().__init__()
         self.hidden_size = hidden_size
         self.num_layers  = num_layers
@@ -245,10 +255,12 @@ class BiRLSTM(nn.Module):
         for i in range(num_layers):
             layer_in = input_size if i == 0 else 2 * hidden_size
             self.fwd_layers.append(
-                RLSTMLayer(layer_in, hidden_size, dropout=dropout, use_rmc=use_rmc)
+                RLSTMLayer(layer_in, hidden_size, dropout=dropout,
+                           use_rmc=use_rmc, use_hybrid=use_hybrid)
             )
             self.bwd_layers.append(
-                RLSTMLayer(layer_in, hidden_size, dropout=dropout, use_rmc=use_rmc)
+                RLSTMLayer(layer_in, hidden_size, dropout=dropout,
+                           use_rmc=use_rmc, use_hybrid=use_hybrid)
             )
 
         self.inter_dropout = nn.Dropout(dropout) if num_layers > 1 else None
@@ -282,27 +294,31 @@ class BiRLSTM(nn.Module):
 # =============================================================================
 class RLSTMClassifier(nn.Module):
     """
-    RLSTMClassifier với 3 ablation flags:
+    RLSTMClassifier với 4 ablation flags:
 
     use_rmc=True/False       → full hybrid memory vs LSTM path only
+    use_hybrid=True/False    → beta-gated blend vs RMC-only (khi use_rmc=True)
     use_cnn=True/False       → CNN feature extractor vs raw input
     use_attention=True/False → attention pooling vs mean pooling
     """
 
     def __init__(
         self,
-        input_size:      int   = 1,
-        hidden_size:     int   = 96,
-        dropout:         float = 0.25,
-        num_classes:     int   = 5,
-        cnn_out_channels: int  = 64,
-        num_layers:      int   = 1,
-        use_rmc:         bool  = True,
-        use_cnn:         bool  = True,
-        use_attention:   bool  = True,
+        input_size: int = 1,
+        hidden_size: int = 96,
+        dropout: float = 0.25,
+        num_classes: int = 5,
+        cnn_out_channels: int = 64,
+        num_layers: int = 1,
+        use_rmc: bool = True,
+        use_hybrid: bool = True,
+        use_cnn: bool = True,
+        use_attention: bool = True,
     ):
+    
         super().__init__()
         self.use_rmc       = use_rmc
+        self.use_hybrid    = use_hybrid
         self.use_cnn       = use_cnn
         self.use_attention = use_attention
 
@@ -318,12 +334,13 @@ class RLSTMClassifier(nn.Module):
             self.cnn       = None
             birlstm_input  = input_size   # raw ECG: 1
 
-        # BiRLSTM — pass use_rmc flag xuống đến từng cell
+        # BiRLSTM — pass use_rmc và use_hybrid xuống đến từng cell
         self.birlstm = BiRLSTM(
             birlstm_input, hidden_size,
             num_layers=num_layers,
             dropout=dropout,
             use_rmc=use_rmc,
+            use_hybrid=use_hybrid,
         )
 
         # Pooling — Ablation Mean-Pool: thay bằng mean over time axis

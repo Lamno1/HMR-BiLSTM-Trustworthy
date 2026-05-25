@@ -11,6 +11,10 @@ Variant & Params & Acc & F1-macro & F1-S & F1-V & F1-F & AUC & Best Ep \\
 No-RMC (c_t = c_lstm) & 505,038 & 0.9779 & 0.8918 & 0.7590 & 0.9505 & 0.7713 & 0.9911 & 20 \\
 No-CNN (raw input) & 450,062 & 0.9658 & 0.8470 & 0.6844 & 0.9329 & 0.6667 & 0.9881 & 18 \\
 Mean-Pool (no attention) & 486,413 & 0.9653 & 0.8506 & 0.6427 & 0.9261 & 0.7216 & 0.9865 & 10 \\
+\textbf{HMR-BiLSTM (full)} & \textbf{505,038} & \textbf{0.9699} & \textbf{0.8804} & \textbf{0.7179} & \textbf{0.9338} & \textbf{0.8037} & \textbf{0.9885} & \textbf{14} \\
+No-Adv-Training & 505,038 & 0.9794 & 0.9023 & 0.7789 & 0.9509 & 0.8025 & 0.9933 & 28 \\
+No-Hybrid-Path (c_t = c_rmc) & 505,038 & 0.9658 & 0.8606 & 0.6307 & 0.9338 & 0.7720 & 0.9854 & 20 \\
+No-Smoothness (lambda=0) & 505,038 & 0.9771 & 0.8919 & 0.7424 & 0.9540 & 0.7831 & 0.9921 & 29 \\
 \bottomrule
 \end{tabular}
 \end{table}
