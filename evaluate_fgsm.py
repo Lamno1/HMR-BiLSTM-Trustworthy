@@ -12,7 +12,7 @@ import torch.nn.functional as F
 from sklearn.metrics import accuracy_score, f1_score, recall_score, classification_report
 from torch.utils.data import DataLoader, TensorDataset
 
-from report_results import load_rlstm_model
+from report_results import load_hmr_bilstm
 from run_baselines import LSTMBaseline
 import torch.nn as nn
 import os
@@ -68,7 +68,11 @@ def evaluate_fgsm(model, dataloader, device, criterion, epsilon=0.02):
             orig_probs = F.softmax(orig_logits, dim=1)
             orig_confidence.append(orig_probs.max(dim=1).values.cpu().numpy())
 
-        x_adv, delta = fgsm_attack(model, x, y, epsilon, criterion)
+        if epsilon == 0.0:
+            x_adv = x.clone().detach()
+            delta = torch.zeros_like(x)
+        else:
+            x_adv, delta = fgsm_attack(model, x, y, epsilon, criterion)
 
         with torch.no_grad():
             adv_logits = model(x_adv)
@@ -379,7 +383,7 @@ def compare_models(models, epsilons, device, test_loader, output_dir: Path):
         print(f"\n[Evaluating {model_name}]")
         try:
             if model_name == "HMR-BiLSTM":
-                model, _ = load_rlstm_model(checkpoint_path, device)
+                model, _ = load_hmr_bilstm(checkpoint_path, device)
             else:
                 model, _ = load_baseline_model(checkpoint_path, device)
             
@@ -495,7 +499,7 @@ def main():
     print(f"Device: {device}")
 
     print("[Loading model]")
-    model, _ = load_rlstm_model(args.checkpoint, device)
+    model, _ = load_hmr_bilstm(args.checkpoint, device)
 
     print("[Preparing test loader]")
     test_loader = build_test_loader(batch_size=args.batch_size)

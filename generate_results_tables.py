@@ -26,52 +26,86 @@ FIGURES_DIR.mkdir(parents=True, exist_ok=True)
 
 # ── 1. Load source data dynamically ────────────────────────────────────────────
 
+def safe_float(v):
+    if isinstance(v, (int, float)):
+        return float(v)
+    try:
+        val = float(v)
+        return val if not np.isnan(val) else "-"
+    except:
+        return "-"
+
 CLEAN = {}
-if (ROOT / "final_results.csv").exists():
-    df_clean = pd.read_csv(ROOT / "final_results.csv")
+if (TABLES_DIR / "final_results.csv").exists():
+    df_clean = pd.read_csv(TABLES_DIR / "final_results.csv")
     for _, row in df_clean.iterrows():
         # Columns: Model,Accuracy,Precision_macro,Recall_macro,F1_macro,F1_weighted,AUC_OvR
         CLEAN[row["Model"]] = dict(
-            acc=row["Accuracy"], prec=row["Precision_macro"], rec=row["Recall_macro"],
-            f1=row["F1_macro"], f1w=row["F1_weighted"], auc=row["AUC_OvR"]
+            acc=safe_float(row["Accuracy"]), prec=safe_float(row["Precision_macro"]), rec=safe_float(row["Recall_macro"]),
+            f1=safe_float(row["F1_macro"]), f1w=safe_float(row["F1_weighted"]), auc=safe_float(row["AUC_OvR"])
         )
 
 FGSM = {}
-if (FIGURES_DIR / "fgsm_baseline_summary.csv").exists():
-    df_fgsm = pd.read_csv(FIGURES_DIR / "fgsm_baseline_summary.csv")
+if (TABLES_DIR / "fgsm_baseline_summary.csv").exists():
+    df_fgsm = pd.read_csv(TABLES_DIR / "fgsm_baseline_summary.csv")
     for _, row in df_fgsm.iterrows():
         # Columns: model,clean_f1,fgsm_f1,asr,recall_clean_S,recall_adv_S,recall_clean_V,recall_adv_V,recall_clean_F,recall_adv_F
         FGSM[row["model"]] = dict(
-            clean_f1=row["clean_f1"], adv_f1=row["fgsm_f1"], asr=row["asr"],
-            rec_s_c=row["recall_clean_S"], rec_s_a=row["recall_adv_S"],
-            rec_v_c=row["recall_clean_V"], rec_v_a=row["recall_adv_V"],
-            rec_f_c=row["recall_clean_F"], rec_f_a=row["recall_adv_F"]
+            clean_f1=safe_float(row["clean_f1"]), adv_f1=safe_float(row["fgsm_f1"]), asr=safe_float(row["asr"]),
+            rec_s_c=safe_float(row["recall_clean_S"]), rec_s_a=safe_float(row["recall_adv_S"]),
+            rec_v_c=safe_float(row["recall_clean_V"]), rec_v_a=safe_float(row["recall_adv_V"]),
+            rec_f_c=safe_float(row["recall_clean_F"]), rec_f_a=safe_float(row["recall_adv_F"])
         )
 
 CALIB = {}
-if (ROOT / "calibration_results.csv").exists():
-    df_calib = pd.read_csv(ROOT / "calibration_results.csv")
+if (TABLES_DIR / "calibration_results.csv").exists():
+    df_calib = pd.read_csv(TABLES_DIR / "calibration_results.csv")
     for _, row in df_calib.iterrows():
-        CALIB[row["Model"]] = dict(ece=row["ECE (lower=better)"], brier=row["Brier Score (lower=better)"])
+        CALIB[row["Model"]] = dict(ece=safe_float(row["ECE (lower=better)"]), brier=safe_float(row["Brier Score (lower=better)"]))
 
 PGD = {}
-if (FIGURES_DIR / "pgd_baseline_comparison.csv").exists():
-    df_pgd = pd.read_csv(FIGURES_DIR / "pgd_baseline_comparison.csv")
+if (TABLES_DIR / "pgd_baseline_comparison.csv").exists():
+    df_pgd = pd.read_csv(TABLES_DIR / "pgd_baseline_comparison.csv")
     for _, row in df_pgd.iterrows():
         # Columns: model,clean_f1,pgd_f1_002,pgd_f1_005,f1_drop_002,asr_002,asr_005
         PGD[row["model"]] = dict(
-            clean_f1=row["clean_f1"], adv_f1=row.get("pgd_f1_002", 0),
-            asr=row.get("asr_002", 0), adv_f1_005=row.get("pgd_f1_005", 0), 
-            asr_005=row.get("asr_005", 0)
+            clean_f1=safe_float(row["clean_f1"]), adv_f1=safe_float(row.get("pgd_f1_002", 0)),
+            asr=safe_float(row.get("asr_002", 0)), adv_f1_005=safe_float(row.get("pgd_f1_005", 0)), 
+            asr_005=safe_float(row.get("asr_005", 0))
         )
 
 # ── helpers ────────────────────────────────────────────────────────────────────
 BOLD = lambda x: f"\\textbf{{{x}}}"
 
-def fmt(v, decimals=4): return f"{v:.{decimals}f}"
+def fmt(v, decimals=4):
+    if isinstance(v, str):
+        return v
+    try:
+        val = float(v)
+        if np.isnan(val):
+            return "-"
+        return f"{val:.{decimals}f}"
+    except (ValueError, TypeError):
+        return str(v)
 
 def best_idx(vals, lower_is_better=False):
-    return vals.index(min(vals)) if lower_is_better else vals.index(max(vals))
+    numeric_vals = []
+    for idx, val in enumerate(vals):
+        try:
+            if val is None or val == "-":
+                continue
+            v = float(val)
+            if not np.isnan(v):
+                numeric_vals.append((v, idx))
+        except (ValueError, TypeError):
+            continue
+    if not numeric_vals:
+        return -1
+    if lower_is_better:
+        best_val, best_i = min(numeric_vals, key=lambda item: item[0])
+    else:
+        best_val, best_i = max(numeric_vals, key=lambda item: item[0])
+    return best_i
 
 
 # ==============================================================================
@@ -84,11 +118,13 @@ def write_csv_and_latex(rows, header, stem, caption, label):
     tex_path = TABLES_DIR / f"{stem}.tex"
 
     # CSV
+    import re
     with open(csv_path, "w", newline="", encoding="utf-8") as f:
         w = csv.writer(f)
         w.writerow(header)
         for r in rows:
-            w.writerow(r)
+            clean_r = [re.sub(r'\\textbf\{([^}]+)\}', r'\1', str(c)) for c in r]
+            w.writerow(clean_r)
     print(f"[CSV] {csv_path}")
 
     # LaTeX
@@ -114,7 +150,7 @@ def write_csv_and_latex(rows, header, stem, caption, label):
 
 # ── Table 1: Clean Performance ─────────────────────────────────────────────────
 def table_clean():
-    header = ["Model", "Accuracy", "Precision", "Recall", "F1-macro", "F1-weighted", "AUC-OvR"]
+    header = ["Model", "Accuracy", "Precision_macro", "Recall_macro", "F1_macro", "F1_weighted", "AUC_OvR"]
     models = list(CLEAN.keys())
     cols = {
         "acc": [CLEAN[m]["acc"] for m in models],
@@ -136,7 +172,7 @@ def table_clean():
             cell("f1w",  CLEAN[m]["f1w"]),
             cell("auc",  CLEAN[m]["auc"]),
         ])
-    write_csv_and_latex(rows, header, "table1_clean_performance",
+    write_csv_and_latex(rows, header, "final_results",
         caption="Clean test-set performance on MIT-BIH Arrhythmia dataset.",
         label="clean_perf")
 

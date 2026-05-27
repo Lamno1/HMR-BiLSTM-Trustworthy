@@ -1,0 +1,18 @@
+% Requires \usepackage{booktabs}
+\begin{table}[h!]
+\centering
+\caption{Full Baseline Comparison: Clean Performance, FGSM, PGD-20, and Calibration.}
+\label{tab:baseline_full}
+\begin{tabular}{lrrrrrrrrrrrrrr}
+\toprule
+Model & Acc & Prec & Rec & F1-macro & F1-w & AUC & FGSM-F1(0.02) & FGSM-Drop(0.02) & FGSM-ASR & PGD-F1(0.02) & PGD-Drop(0.02) & PGD-ASR & ECE↓ & Brier↓ \\
+\midrule
+Logistic Regression & 0.6741 & 0.4433 & 0.7650 & 0.4786 & 0.7375 & 0.9146 & - & - & - & - & - & - & - & - \\
+Decision Tree & 0.8911 & 0.6162 & 0.8477 & 0.6846 & 0.9058 & 0.9197 & - & - & - & - & - & - & - & - \\
+LSTM & 0.9639 & 0.8300 & 0.9027 & 0.8583 & 0.9669 & 0.9878 & 0.7628 & 11.13% & 0.0492 & 0.7365 & 14.19% & 0.0700 & 0.0056 & 0.0461 \\
+BiLSTM & 0.9654 & 0.8322 & 0.8733 & 0.8505 & 0.9657 & 0.9828 & 0.7886 & 7.29% & 0.0170 & 0.7728 & 9.14% & 0.0221 & 0.0080 & 0.0542 \\
+HMR-BiLSTM (no Adv) & 0.9794 & - & - & 0.9024 & - & - & 0.8046 & 10.84% & 0.0346 & - & - & - & - & - \\
+HMR-BiLSTM & 0.9749 & 0.8562 & 0.9146 & 0.8825 & 0.9758 & 0.9916 & 0.8425 & 4.54% & 0.0114 & 0.8391 & 4.91% & 0.0131 & 0.0397 & 0.0444 \\
+\bottomrule
+\end{tabular}
+\end{table}

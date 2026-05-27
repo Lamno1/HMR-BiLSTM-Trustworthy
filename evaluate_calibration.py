@@ -10,7 +10,7 @@ import csv
 from torch.utils.data import DataLoader, TensorDataset
 
 # Import model loaders from existing scripts
-from report_results import load_rlstm_model
+from report_results import load_hmr_bilstm
 from evaluate_fgsm import load_baseline_model, build_test_loader
 
 def calculate_brier_score(probs, labels, num_classes=5):
@@ -213,7 +213,7 @@ def main():
             
         print(f"\nEvaluating {model_name}...")
         if m_type == "rlstm":
-            model, _ = load_rlstm_model(ckpt_path, device)
+            model, _ = load_hmr_bilstm(ckpt_path, device)
         else:
             model, _ = load_baseline_model(ckpt_path, device)
             

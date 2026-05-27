@@ -8,7 +8,7 @@ matplotlib.use("Agg")
 import matplotlib.pyplot as plt
 import numpy as np
 import torch
-from report_results import load_rlstm_model
+from report_results import load_hmr_bilstm
 from run_baselines import LSTMBaseline
 
 from evaluate_fgsm import evaluate_fgsm, build_test_loader
@@ -16,6 +16,7 @@ from evaluate_fgsm import evaluate_fgsm, build_test_loader
 MODEL_SPECS = {
     "LSTM": Path("results/checkpoints/best_lstm.pt"),
     "BiLSTM": Path("results/checkpoints/best_bilstm.pt"),
+    "HMR-BiLSTM (no Adv)": Path("results/ablation/checkpoints/best_rlstm_no_adv.pt"),
     "HMR-BiLSTM": Path("results/checkpoints/best_rlstm.pt"),
 }
 
@@ -26,8 +27,8 @@ def load_baseline_model(name, checkpoint_path: Path, device):
     if not checkpoint_path.exists():
         raise FileNotFoundError(f"Checkpoint not found: {checkpoint_path}")
 
-    if name == "HMR-BiLSTM":
-        model, _ = load_rlstm_model(str(checkpoint_path), device)
+    if name.startswith("HMR-BiLSTM"):
+        model, _ = load_hmr_bilstm(str(checkpoint_path), device)
         return model
 
     # run_baselines.py saves raw state_dict via torch.save(best_state, path)
@@ -210,6 +211,7 @@ def build_summary_table(results, summary_epsilon=0.02):
             "model": model_name,
             "clean_f1": float(clean_row["macro_f1"]),
             "fgsm_f1": float(attack_row["macro_f1"]),
+            "f1_drop_pct": (float(clean_row["macro_f1"]) - float(attack_row["macro_f1"])) / float(clean_row["macro_f1"]) * 100,
             "asr": float(attack_row["attack_success_rate"]),
         }
         # Per-class recall delta (clean → adv) for S, V, F
@@ -226,7 +228,7 @@ def save_summary_table(table, output_dir: Path):
     output_dir.mkdir(parents=True, exist_ok=True)
     csv_path = output_dir / "fgsm_baseline_summary.csv"
     header = [
-        "model", "clean_f1", "fgsm_f1", "asr",
+        "model", "clean_f1", "fgsm_f1", "f1_drop_pct", "asr",
         "recall_clean_S", "recall_adv_S",
         "recall_clean_V", "recall_adv_V",
         "recall_clean_F", "recall_adv_F",
@@ -243,6 +245,9 @@ def main():
     # Fix seeds for reproducibility.
     torch.manual_seed(42)
     np.random.seed(42)
+    
+    # Disable CuDNN to allow RNN backward passes with respect to inputs in eval mode
+    torch.backends.cudnn.enabled = False
 
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
     print(f"Device: {device}")
@@ -299,12 +304,12 @@ def main():
     if summary_table:
         save_summary_table(summary_table, output_dir)
         print("\nBaseline comparison table (epsilon=0.02):")
-        header_line = f"{'Model':<12} {'Clean F1':>8} {'FGSM F1':>8} {'ASR':>7} | {'Rec_S clean':>11} {'Rec_S adv':>9} | {'Rec_V clean':>11} {'Rec_V adv':>9} | {'Rec_F clean':>11} {'Rec_F adv':>9}"
+        header_line = f"{'Model':<20} {'Clean F1':>8} {'FGSM F1':>8} {'Drop(%)':>8} {'ASR':>7} | {'Rec_S clean':>11} {'Rec_S adv':>9} | {'Rec_V clean':>11} {'Rec_V adv':>9} | {'Rec_F clean':>11} {'Rec_F adv':>9}"
         print(header_line)
         print("-" * len(header_line))
         for row in summary_table:
             print(
-                f"{row['model']:<12} {row['clean_f1']:>8.4f} {row['fgsm_f1']:>8.4f} {row['asr']:>7.4f}"
+                f"{row['model']:<20} {row['clean_f1']:>8.4f} {row['fgsm_f1']:>8.4f} {row['f1_drop_pct']:>7.2f}% {row['asr']:>7.4f}"
                 f" | {row.get('recall_clean_S', 0):>11.4f} {row.get('recall_adv_S', 0):>9.4f}"
                 f" | {row.get('recall_clean_V', 0):>11.4f} {row.get('recall_adv_V', 0):>9.4f}"
                 f" | {row.get('recall_clean_F', 0):>11.4f} {row.get('recall_adv_F', 0):>9.4f}"

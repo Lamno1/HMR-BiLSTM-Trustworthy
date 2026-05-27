@@ -161,8 +161,172 @@ class LSTMBaseline(nn.Module):
         return self.classifier(h_pooled)
 
 
+
+# ─── ResNet1D baseline ───
+class ResidualBlock1D(nn.Module):
+    """Basic residual block cho 1D signal."""
+    def __init__(self, channels, kernel_size=7, dropout=0.1):
+        super().__init__()
+        pad = kernel_size // 2
+        self.conv1 = nn.Conv1d(channels, channels, kernel_size, padding=pad, bias=False)
+        self.bn1   = nn.BatchNorm1d(channels)
+        self.conv2 = nn.Conv1d(channels, channels, kernel_size, padding=pad, bias=False)
+        self.bn2   = nn.BatchNorm1d(channels)
+        self.drop  = nn.Dropout(dropout)
+
+    def forward(self, x):
+        residual = x
+        out = torch.relu(self.bn1(self.conv1(x)))
+        out = self.drop(out)
+        out = self.bn2(self.conv2(out))
+        return torch.relu(out + residual)
+
+
+class ResNet1D(nn.Module):
+    """
+    ResNet1D baseline — 1D residual network cho ECG classification.
+    Kiến trúc gần với Kiranyaz et al. (2016) và Wang et al. (2017):
+    stem Conv → 4 residual blocks (64 ch) → global avg pool → classifier.
+    ~220K params, so sánh được với HMR-BiLSTM (~505K).
+    """
+    def __init__(self, input_size=1, num_classes=5, base_ch=64, dropout=0.25):
+        super().__init__()
+        # Stem: downample T=187 → T=46 (giống CNN của các model khác)
+        self.stem = nn.Sequential(
+            nn.Conv1d(input_size, base_ch, kernel_size=15, padding=7, stride=2, bias=False),
+            nn.BatchNorm1d(base_ch),
+            nn.ReLU(),
+            nn.MaxPool1d(2),
+        )
+        # 4 residual blocks cùng channel
+        self.blocks = nn.Sequential(
+            ResidualBlock1D(base_ch, kernel_size=7, dropout=dropout * 0.4),
+            ResidualBlock1D(base_ch, kernel_size=7, dropout=dropout * 0.4),
+            ResidualBlock1D(base_ch, kernel_size=7, dropout=dropout * 0.4),
+            ResidualBlock1D(base_ch, kernel_size=7, dropout=dropout * 0.4),
+        )
+        # Global average pooling → flatten → classify
+        self.classifier = nn.Sequential(
+            nn.AdaptiveAvgPool1d(1),
+            nn.Flatten(),
+            nn.Dropout(dropout),
+            nn.Linear(base_ch, base_ch // 2),
+            nn.ReLU(),
+            nn.Dropout(dropout * 0.5),
+            nn.Linear(base_ch // 2, num_classes),
+        )
+
+    def forward(self, x):
+        # x: (B, T, 1) → transpose → (B, 1, T)
+        x = x.transpose(1, 2)
+        x = self.stem(x)
+        x = self.blocks(x)
+        return self.classifier(x)
+
+
+
+
+def train_modern_baseline(name, model, train, val, test, device,
+                           class_weights=None, epochs=12):
+    """
+    Training loop dùng chung cho ResNet1D và TransformerECG.
+    Giống với train_lstm_baseline về config: Adam lr=1e-3, patience=4,
+    weighted CE, gradient clipping 0.5.
+    """
+    X_tr, y_tr = train
+    X_va, y_va = val
+    X_te, y_te = test
+
+    train_loader = DataLoader(
+        TensorDataset(torch.from_numpy(X_tr).float(),
+                      torch.from_numpy(y_tr).long()),
+        batch_size=128, shuffle=True, num_workers=0, pin_memory=False,
+    )
+    val_loader = DataLoader(
+        TensorDataset(torch.from_numpy(X_va).float(),
+                      torch.from_numpy(y_va).long()),
+        batch_size=128, shuffle=False, num_workers=0, pin_memory=False,
+    )
+    test_loader = DataLoader(
+        TensorDataset(torch.from_numpy(X_te).float(),
+                      torch.from_numpy(y_te).long()),
+        batch_size=128, shuffle=False, num_workers=0, pin_memory=False,
+    )
+
+    model = model.to(device)
+    n_params = sum(p.numel() for p in model.parameters() if p.requires_grad)
+    print(f"  Parameters: {n_params:,}")
+
+    criterion = (nn.CrossEntropyLoss(weight=class_weights.to(device))
+                 if class_weights is not None else nn.CrossEntropyLoss())
+    optimizer = torch.optim.Adam(model.parameters(), lr=1e-3, weight_decay=1e-4)
+
+    best_f1, best_state, patience_cnt = 0.0, None, 0
+    t0 = time.time()
+    last_epoch = 0
+
+    for epoch in range(1, epochs + 1):
+        last_epoch = epoch
+        model.train()
+        for X, y in train_loader:
+            X, y = X.to(device), y.to(device)
+            optimizer.zero_grad()
+            loss = criterion(model(X), y)
+            if torch.isnan(loss) or torch.isinf(loss):
+                continue
+            loss.backward()
+            torch.nn.utils.clip_grad_norm_(model.parameters(), 0.5)
+            optimizer.step()
+
+        model.eval()
+        all_logits, all_y = [], []
+        with torch.no_grad():
+            for X, y in val_loader:
+                all_logits.append(model(X.to(device)).cpu())
+                all_y.append(y)
+        preds = torch.cat(all_logits).argmax(-1).numpy()
+        y_true_val = torch.cat(all_y).numpy()
+        val_f1 = f1_score(y_true_val, preds, average="macro", zero_division=0)
+        print(f"    epoch {epoch:2d} | val F1_macro = {val_f1:.4f}")
+
+        if val_f1 > best_f1:
+            best_f1 = val_f1
+            best_state = {k: v.cpu().clone() for k, v in model.state_dict().items()}
+            patience_cnt = 0
+        else:
+            patience_cnt += 1
+            if patience_cnt >= 4:
+                break
+
+    train_time = time.time() - t0
+    print(f"  [{name}] best val F1_macro = {best_f1:.4f} (stopped at epoch {last_epoch})")
+
+    # Save checkpoint
+    checkpoint_dir = Path("results/checkpoints")
+    checkpoint_dir.mkdir(parents=True, exist_ok=True)
+    ckpt_path = checkpoint_dir / f"best_{name.lower().replace('-', '_')}.pt"
+    torch.save(best_state, ckpt_path)
+    print(f"  Saved checkpoint: {ckpt_path}")
+
+    # Test evaluation
+    model.load_state_dict(best_state)
+    model.eval()
+    all_logits, all_y = [], []
+    with torch.no_grad():
+        for X, y in test_loader:
+            all_logits.append(model(X.to(device)).cpu())
+            all_y.append(y)
+    logits = torch.cat(all_logits)
+    y_true = torch.cat(all_y).numpy()
+    probs = torch.softmax(logits, -1).numpy()
+    preds = logits.argmax(-1).numpy()
+
+    metrics = compute_metrics(y_true, preds, probs)
+    return {**metrics, "train_time_sec": train_time}
+
+
 def train_lstm_baseline(name, train, val, test, bidirectional, device,
-                         class_weights=None, epochs=12):
+                        class_weights=None, epochs=12):
     X_tr, y_tr = train
     X_va, y_va = val
     X_te, y_te = test
@@ -312,7 +476,24 @@ def main():
     print(f"  Test F1_macro: {all_results['bilstm']['f1_macro']:.4f}, "
           f"AUC: {all_results['bilstm']['auc_ovr']:.4f}")
 
-    Path("results").mkdir(exist_ok=True)
+    print("\n[ResNet1D]")
+    torch.manual_seed(42)
+    resnet_model = ResNet1D(
+        input_size=train_data[0].shape[-1],
+        num_classes=NUM_CLASSES,
+        base_ch=64,
+        dropout=0.25,
+    )
+    all_results["resnet1d"] = train_modern_baseline(
+        "ResNet1D", resnet_model, train_data, val_data, test_data,
+        device=device, class_weights=cw, epochs=12,
+    )
+    
+    print(f"  Test F1_macro: {all_results['resnet1d']['f1_macro']:.4f}, "
+          f"AUC: {all_results['resnet1d']['auc_ovr']:.4f}")
+
+    Path("results/logs").mkdir(parents=True, exist_ok=True)
+
     out_path = Path("results/logs/baseline_results.json")
     with open(out_path, "w") as f:
         json.dump(all_results, f, indent=2)

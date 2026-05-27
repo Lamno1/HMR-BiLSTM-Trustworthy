@@ -32,16 +32,8 @@ Thumbs.db
 .DS_Store
 desktop.ini
 
-# ---------- Data (large raw files) ----------
-data/raw/*.csv
-
-# ---------- Processed data (reproducible, large) ----------
-data/processed/*.npz
-data/processed/*.npy
-
-# ---------- Model checkpoints (large binary) ----------
-results/checkpoints/*.pt
-results/ablation/checkpoints/*.pt
+# ---------- Data (large raw files only) ----------
+data/raw/
 
 # ---------- Temporary / utility ----------
 check_progress.py

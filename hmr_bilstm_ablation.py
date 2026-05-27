@@ -1,13 +1,13 @@
 """
-rlstm_model_ablation.py
+hmr_bilstm_ablation.py
 ========================
-Drop-in replacement cho rlstm_model.py dùng cho ablation study.
+Drop-in replacement cho hmr_bilstm.py dùng cho ablation study.
 Thêm 3 flag vào RLSTMCell và RLSTMClassifier, KHÔNG đụng gì đến code gốc.
 
 Cách dùng:
-    from rlstm_model_ablation import RLSTMClassifier, RLSTMLoss
+    from hmr_bilstm_ablation import RLSTMClassifier, RLSTMLoss
 
-    # Full model (giống rlstm_model.py gốc)
+    # Full model (giống hmr_bilstm.py gốc)
     model = RLSTMClassifier(use_rmc=True, use_cnn=True, use_attention=True)
 
     # Ablation No-RMC: c_t = c_lstm (bỏ toàn bộ RMC path)
@@ -396,7 +396,7 @@ class RLSTMClassifier(nn.Module):
 
 
 # =============================================================================
-#  LOSS (copy nguyên từ rlstm_model.py để file này tự đủ)
+#  LOSS (copy nguyên từ hmr_bilstm.py để file này tự đủ)
 # =============================================================================
 def temporal_smoothness_loss(r_seq):
     if r_seq.size(1) < 2:

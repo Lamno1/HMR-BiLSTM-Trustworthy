@@ -25,7 +25,7 @@ from sklearn.metrics import (
 )
 from sklearn.preprocessing import label_binarize
 
-from rlstm_model import RLSTMClassifier
+from hmr_bilstm import RLSTMClassifier
 
 
 CLASS_NAMES = ["N", "S", "V", "F", "Q"]
@@ -33,7 +33,7 @@ NUM_CLASSES = 5
 
 
 # ─── Load mô hình HMR-BiLSTM đã train ────────────────────────
-def load_rlstm_model(checkpoint_path, device, input_size=1):
+def load_hmr_bilstm(checkpoint_path, device, input_size=1):
     ckpt = torch.load(checkpoint_path, map_location=device, weights_only=False)
     cfg = ckpt["config"]
 
@@ -186,7 +186,7 @@ def plot_gate_trajectories(r_all, y_all, save_path):
 
 def plot_comparison_bars(all_results, save_path):
     """Bar chart so sánh tất cả mô hình."""
-    model_order = ["logistic_regression", "decision_tree", "lstm", "bilstm", "rlstm"]
+    model_order = ["logistic_regression", "decision_tree", "lstm", "bilstm", "hmr_bilstm"]
     model_labels = ["LR", "DT", "LSTM", "BiLSTM", "HMR-BiLSTM"]
     metrics = ["accuracy", "precision_macro", "recall_macro", "f1_macro", "auc_ovr"]
     metric_labels = ["Accuracy", "Prec(macro)", "Rec(macro)", "F1(macro)", "AUC(OvR)"]
@@ -220,13 +220,13 @@ def plot_comparison_bars(all_results, save_path):
 
 def plot_results_table(all_results, save_path):
     """Xuất bảng kết quả ra file ảnh."""
-    model_order = ["logistic_regression", "decision_tree", "lstm", "bilstm", "rlstm"]
+    model_order = ["logistic_regression", "decision_tree", "lstm", "bilstm", "hmr_bilstm"]
     pretty = {
         "logistic_regression": "Logistic Regression",
         "decision_tree": "Decision Tree",
         "lstm": "LSTM",
         "bilstm": "BiLSTM",
-        "rlstm": "HMR-BiLSTM",
+        "hmr_bilstm": "HMR-BiLSTM",
     }
     
     cell_text = []
@@ -236,7 +236,7 @@ def plot_results_table(all_results, save_path):
         if name not in all_results:
             continue
         m = all_results[name]
-        marker = " *" if name == "rlstm" else ""
+        marker = " *" if name == "hmr_bilstm" else ""
         row_labels.append(pretty[name] + marker)
         cell_text.append([
             f"{m['accuracy']:.4f}",
@@ -282,7 +282,7 @@ def main():
 
     input_size = X_test.shape[-1] if len(X_test.shape) > 2 else 1
     checkpoint_path = "results/checkpoints/best_rlstm.pt"
-    model, ckpt = load_rlstm_model(checkpoint_path, device, input_size)
+    model, ckpt = load_hmr_bilstm(checkpoint_path, device, input_size)
 
     print(f"  Best epoch: {ckpt['epoch']}, val F1_macro: {ckpt.get('val_f1_macro', 0):.4f}")
 
@@ -302,7 +302,7 @@ def main():
         with open(baseline_file) as f:
             all_results = json.load(f)
 
-    all_results["rlstm"] = {
+    all_results["hmr_bilstm"] = {
         "accuracy":         accuracy_score(y_test, preds),
         "precision_macro":  precision_score(y_test, preds, average="macro", zero_division=0),
         "recall_macro":     recall_score(y_test, preds, average="macro", zero_division=0),
@@ -319,19 +319,19 @@ def main():
     print("=" * 80)
     print(f"{'Model':<22} {'Acc':>8} {'P_mac':>8} {'R_mac':>8} {'F1_mac':>8} {'F1_w':>8} {'AUC':>8}")
     print("-" * 80)
-    order = ["logistic_regression", "decision_tree", "lstm", "bilstm", "rlstm"]
+    order = ["logistic_regression", "decision_tree", "lstm", "bilstm", "hmr_bilstm"]
     pretty = {
         "logistic_regression": "Logistic Regression",
         "decision_tree": "Decision Tree",
         "lstm": "LSTM",
         "bilstm": "BiLSTM",
-        "rlstm": "HMR-BiLSTM",
+        "hmr_bilstm": "HMR-BiLSTM",
     }
     for name in order:
         if name not in all_results:
             continue
         m = all_results[name]
-        marker = " *" if name == "rlstm" else ""
+        marker = " *" if name == "hmr_bilstm" else ""
         print(f"{pretty[name]:<22} "
               f"{m['accuracy']:>8.4f} "
               f"{m['precision_macro']:>8.4f} "

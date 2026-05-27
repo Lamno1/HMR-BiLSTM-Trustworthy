@@ -13,8 +13,8 @@ matplotlib.use("Agg")
 import matplotlib.pyplot as plt
 
 # Custom imports
-from rlstm_model import RLSTMClassifier
-from report_results import load_rlstm_model, collect_predictions_and_gates
+from hmr_bilstm import RLSTMClassifier
+from report_results import load_hmr_bilstm, collect_predictions_and_gates
 from evaluate_fgsm import load_baseline_model
 from run_baselines import flatten_sequences, LSTMBaseline, NUM_CLASSES
 
@@ -118,8 +118,8 @@ def main():
     rlstm_ckpt = Path("results/checkpoints/best_rlstm.pt")
     if rlstm_ckpt.exists():
         input_size = X_te.shape[-1] if len(X_te.shape) > 2 else 1
-        rlstm_model, _ = load_rlstm_model(str(rlstm_ckpt), device, input_size)
-        results["HMR-BiLSTM"] = evaluate_torch_model_noise(rlstm_model, X_te, y_te, device, noise_levels, is_rlstm=True)
+        hmr_bilstm, _ = load_hmr_bilstm(str(rlstm_ckpt), device, input_size)
+        results["HMR-BiLSTM"] = evaluate_torch_model_noise(hmr_bilstm, X_te, y_te, device, noise_levels, is_rlstm=True)
     else:
         print("[WARNING] best_rlstm.pt not found. Skipping HMR-BiLSTM.")
         results["HMR-BiLSTM"] = [0.0] * len(noise_levels)

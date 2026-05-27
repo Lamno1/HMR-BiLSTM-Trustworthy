@@ -20,7 +20,7 @@ from sklearn.metrics import (
 )
 from pathlib import Path
 
-from rlstm_model import RLSTMClassifier, RLSTMLoss
+from hmr_bilstm import RLSTMClassifier, RLSTMLoss
 
 
 # ─── Config ───────────────────────────────────────────────────────────────────

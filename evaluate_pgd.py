@@ -34,7 +34,7 @@ import torch.nn.functional as F
 from sklearn.metrics import f1_score, recall_score
 from torch.utils.data import DataLoader, TensorDataset
 
-from report_results import load_rlstm_model
+from report_results import load_hmr_bilstm
 from evaluate_fgsm import load_baseline_model, build_test_loader, CLASS_NAMES, CLINICAL_CLASSES
 
 # ---------------------------------------------------------------------------
@@ -88,7 +88,10 @@ def evaluate_pgd(model, dataloader, device, criterion, epsilon, alpha, steps):
             orig_conf_list.append(orig_probs.max(dim=1).values.cpu().numpy())
 
         # Adversarial examples (PGD)
-        x_adv, _ = pgd_attack(model, x, y, epsilon, alpha, steps, criterion)
+        if epsilon == 0.0:
+            x_adv = x.clone().detach()
+        else:
+            x_adv, _ = pgd_attack(model, x, y, epsilon, alpha, steps, criterion)
 
         with torch.no_grad():
             adv_logits = model(x_adv)
@@ -172,7 +175,7 @@ def compare_models_pgd(models_dict, epsilons, alpha, steps, device, test_loader)
         print(f"\n[PGD] Evaluating {model_name}")
         try:
             if model_name == "HMR-BiLSTM":
-                model, _ = load_rlstm_model(ckpt, device)
+                model, _ = load_hmr_bilstm(ckpt, device)
             else:
                 model, _ = load_baseline_model(ckpt, device)
             comparison[model_name] = evaluate_pgd_grid(
