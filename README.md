@@ -8,7 +8,7 @@ HMR-BiLSTM is a deep learning framework for ECG arrhythmia classification on the
 
 - **Residual Memory Control (RMC):** Hybrid memory path with softmax-based memory decomposition for adaptive long-term dependency modeling.
 - **Bidirectional LSTM:** Captures both forward and backward temporal context in ECG signals.
-- **CNN Feature Extractor:** 1D convolutional front-end for local morphological feature extraction.
+- **CNN Feature Extractor:** 1D convolutional front‑end for local morphological feature extraction.
 - **Attention Pooling:** Learnable temporal attention mechanism for sequence aggregation.
 - **Focal Loss + Class Weights:** Addresses severe class imbalance (N >> S, V, F, Q).
 - **Adversarial Training (FGSM):** Improves robustness against adversarial perturbations at training time.
@@ -18,9 +18,7 @@ HMR-BiLSTM is a deep learning framework for ECG arrhythmia classification on the
 
 ## Dataset
 
-This project uses the [MIT-BIH Arrhythmia Dataset](https://www.kaggle.com/datasets/shayanfazeli/heartbeat).
-
-After downloading, place the CSV files in `data/raw/`:
+The project uses the [MIT‑BIH Arrhythmia Dataset](https://www.kaggle.com/datasets/shayanfazeli/heartbeat). After downloading, place the CSV files in `data/raw/`:
 
 ```
 data/raw/
@@ -28,9 +26,7 @@ data/raw/
 └── mitbih_test.csv
 ```
 
-> **Note:** `data/raw/` is excluded from version control (see `.gitignore`). All other data (processed splits, class weights) and model checkpoints are tracked in the repository.
-
-**5-class AAMI mapping:** N (Normal), S (Supraventricular), V (Ventricular), F (Fusion), Q (Unknown).
+> **Note:** `data/raw/` is ignored by version control (see `.gitignore`). All processed data, class weights, and model checkpoints are stored within the repository under `data/processed/` and `results/`.
 
 ---
 
@@ -40,43 +36,33 @@ data/raw/
 HMR-BiLSTM/
 │
 ├── data/
-│   ├── raw/                                # Raw MIT-BIH CSV files (git-ignored)
-│   └── processed/                          # Preprocessed .npz splits + class weights
+│   ├── raw/                # Raw MIT‑BIH CSV files (git‑ignored)
+│   └── processed/          # Pre‑processed splits + class weights
 │
 ├── results/
-│   ├── checkpoints/                        # Model checkpoints (.pt)
-│   │   ├── best_lstm.pt
-│   │   ├── best_bilstm.pt
-│   │   └── best_rlstm.pt                   # HMR-BiLSTM checkpoint
-│   ├── figures/                            # Generated plots and visualizations
-│   ├── logs/                               # Evaluation logs (JSON)
-│   │   ├── baseline_results.json
-│   │   ├── fgsm_baseline_comparison.json
-│   │   └── pgd_baseline_comparison.json
-│   ├── tables/                             # LaTeX and CSV result tables
-│   └── ablation/                           # Ablation study results
-│       ├── checkpoints/                    # Ablation variant checkpoints
-│       ├── ablation_results.json           # Full ablation metrics
-│       ├── ablation_table_final.csv        # Summary table (CSV)
-│       └── ablation_table_final.tex        # Summary table (LaTeX)
+│   ├── checkpoints/        # Model checkpoints (.pt)
+│   ├── figures/            # Generated plots and visualizations
+│   ├── tables/             # LaTeX and CSV result tables (final)
+│   │   ├── ablation_table_final.csv
+│   │   └── ablation_table_final.tex
+│   └── logs/               # Evaluation logs (JSON)
 │
-├── hmr_bilstm.py                           # HMR-BiLSTM model architecture + RLSTMLoss
-├── hmr_bilstm_ablation.py                  # Ablation variants (No-RMC, No-CNN, Mean-Pool, etc.)
-├── preprocess.py                           # Data preprocessing and train/val/test split
-├── train.py                                # Main training script (HMR-BiLSTM)
-├── run_baselines.py                        # Train baseline models (LSTM, BiLSTM)
-├── run_ablation.py                         # Ablation study (train + evaluate all variants)
-├── report_results.py                       # Generate core figures (confusion matrix, ROC, gates)
-├── evaluate_fgsm.py                        # FGSM adversarial robustness evaluation
-├── evaluate_pgd.py                         # PGD adversarial robustness evaluation
-├── evaluate_calibration.py                 # Calibration analysis (reliability diagram, ECE, Brier)
-├── evaluate_robustness_all.py              # Gaussian noise robustness evaluation
-├── evaluate_ablation_robustness.py         # Adversarial robustness for ablation variants
-├── compare_fgsm_baselines.py               # FGSM comparison across all models
-├── combine_ablation_tables.py              # Merge ablation clean + robustness tables
-├── generate_results_tables.py              # Generate LaTeX/CSV summary tables
-├── plot_and_export.py                      # Export final figures + baseline_full_comparison table
-├── requirements.txt                        # Python dependencies
+├── hmr_bilstm.py                       # Model architecture + RLSTMLoss
+├── hmr_bilstm_ablation.py              # Ablation variants
+├── preprocess.py                       # Data preprocessing and split
+├── train.py                            # Main training script
+├── run_baselines.py                    # Train baseline models
+├── run_ablation.py                     # Ablation study driver
+├── report_results.py                   # Core figures (confusion matrix, ROC)
+├── evaluate_fgsm.py                    # FGSM robustness evaluation
+├── evaluate_pgd.py                     # PGD robustness evaluation
+├── evaluate_calibration.py             # Calibration analysis
+├── evaluate_robustness_all.py          # Gaussian noise robustness
+├── evaluate_ablation_robustness.py     # Ablation robustness evaluation
+├── combine_ablation_tables.py          # Merge clean + robustness tables
+├── generate_results_tables.py          # Generate LaTeX/CSV summary tables
+├── plot_and_export.py                  # Export final figures & tables
+├── requirements.txt                    # Python dependencies
 └── README.md
 ```
 
@@ -107,15 +93,15 @@ pip install torch torchvision torchaudio --index-url https://download.pytorch.or
 python preprocess.py
 ```
 
-Splits the raw MIT-BIH dataset into train/val/test sets and computes class weights. Outputs saved to `data/processed/`.
+Splits the raw MIT‑BIH dataset into train/val/test sets and computes class weights. Outputs saved to `data/processed/`.
 
-### 2. Train HMR-BiLSTM (Proposed Model)
+### 2. Train HMR‑BiLSTM (Proposed Model)
 
 ```bash
 python train.py
 ```
 
-Trains the main HMR-BiLSTM model with adversarial training (FGSM), focal loss, cosine annealing LR, and early stopping. Best checkpoint saved to `results/checkpoints/best_rlstm.pt`.
+Trains the main HMR‑BiLSTM model with adversarial training (FGSM), focal loss, cosine annealing LR, and early stopping. Best checkpoint saved to `results/checkpoints/best_rlstm.pt`.
 
 ### 3. Train Baseline Models
 
@@ -171,59 +157,7 @@ python plot_and_export.py
 
 ## Results
 
-### Table 1 — Clean Performance (Test Set)
-
-| Model | Accuracy | Precision | Recall | F1 (macro) | F1-weighted | AUC-OvR |
-|---|---|---|---|---|---|---|
-| Logistic Regression | 0.6741 | 0.4433 | 0.7650 | 0.4786 | 0.7375 | 0.9146 |
-| Decision Tree | 0.8911 | 0.6162 | 0.8477 | 0.6846 | 0.9058 | 0.9197 |
-| LSTM | 0.9639 | 0.8300 | 0.9027 | 0.8583 | 0.9669 | 0.9878 |
-| BiLSTM | 0.9654 | 0.8322 | 0.8733 | 0.8505 | 0.9657 | 0.9828 |
-| ResNet1D | 0.9736 | 0.8496 | 0.9056 | 0.8747 | 0.9744 | 0.9914 |
-| HMR-BiLSTM (no Adv) | **0.9794** | — | — | **0.9024** | — | — |
-| **HMR-BiLSTM** | 0.9749 | **0.8562** | **0.9146** | 0.8825 | **0.9758** | **0.9916** |
-
-### Table 2 — FGSM Adversarial Robustness (ε=0.02)
-
-| Model | F1 (clean) | F1 (adv) | F1 Drop | ASR | Rec-S clean | Rec-S adv | Rec-V clean | Rec-V adv | Rec-F clean | Rec-F adv |
-|---|---|---|---|---|---|---|---|---|---|---|
-| LSTM | 0.8583 | 0.7628 | 11.13% | 0.0492 | 0.8129 | 0.7248 | 0.9372 | 0.8847 | 0.8086 | 0.6667 |
-| BiLSTM | 0.8505 | 0.7886 | 7.29% | 0.0170 | 0.6781 | 0.6349 | 0.9586 | 0.9358 | 0.7778 | 0.6852 |
-| ResNet1D | 0.8747 | 0.8074 | 7.70% | 0.0254 | 0.7896 | 0.7125 | 0.9451 | 0.9058 | 0.8312 | 0.7143 |
-| HMR-BiLSTM (no Adv) | 0.9024 | 0.8046 | 10.84% | 0.0346 | 0.8489 | 0.7680 | 0.9689 | 0.9413 | 0.8025 | 0.6790 |
-| **HMR-BiLSTM** | 0.8825 | **0.8425** | **4.54%** | **0.0114** | 0.8112 | 0.7842 | 0.9448 | 0.9268 | 0.8457 | 0.7963 |
-
-### Table 3 — PGD-20 Adversarial Robustness
-
-| Model | F1 (clean) | F1-PGD (ε=0.02) | F1-PGD (ε=0.05) | F1 Drop (0.02) | ASR (0.02) | ASR (0.05) |
-|---|---|---|---|---|---|---|
-| LSTM | 0.8583 | 0.7365 | 0.5338 | 14.19% | 0.0700 | 0.2641 |
-| ResNet1D | 0.8747 | 0.8019 | 0.7064 | 8.31% | 0.0331 | 0.1238 |
-| BiLSTM | 0.8505 | 0.7728 | 0.6080 | 9.14% | 0.0221 | 0.0971 |
-| **HMR-BiLSTM** | 0.8825 | **0.8391** | **0.7470** | **4.91%** | **0.0131** | **0.0509** |
-
-### Table 4 — Calibration
-
-| Model | ECE ↓ | Brier Score ↓ | ECE Grade | Brier Grade |
-|---|---|---|---|---|
-| LSTM | **0.0056** | 0.0461 | Excellent | Excellent |
-| ResNet1D | 0.0289 | 0.0418 | Good | Excellent |
-| BiLSTM | 0.0080 | 0.0542 | Excellent | Good |
-| HMR-BiLSTM | 0.0397 | **0.0444** | Good | Excellent |
-
-### Table 5 — Ablation Study
-
-| Variant | Params | F1-Clean | F1-Adv (ε=0.02) | F1-Adv (ε=0.05) | F1-S | F1-V | F1-F | AUC |
-|---|---|---|---|---|---|---|---|---|
-| HMR-BiLSTM (full) | 505,038 | **0.8921** | **0.8425** | **0.7823** | **0.7387** | 0.9492 | **0.7944** | **0.9917** |
-| No-RMC (c_t = c_lstm) | 505,038 | 0.8918 | 0.8269 | 0.7529 | 0.7590 | **0.9505** | 0.7713 | 0.9911 |
-| No-CNN (raw input) | 450,062 | 0.8470 | 0.8007 | 0.7168 | 0.6844 | 0.9329 | 0.6667 | 0.9881 |
-| Mean-Pool (no attention) | 486,413 | 0.8506 | 0.8175 | 0.7540 | 0.6427 | 0.9261 | 0.7216 | 0.9865 |
-| No-Adv-Training | 505,038 | 0.9023 | 0.8045 | 0.5589 | 0.7789 | 0.9509 | 0.8025 | 0.9933 |
-| No-Hybrid-Path (c_t = c_rmc) | 505,038 | 0.8606 | 0.8162 | 0.7357 | 0.6307 | 0.9338 | 0.7720 | 0.9854 |
-| No-Smoothness (λ=0) | 505,038 | 0.8919 | 0.8384 | 0.7613 | 0.7424 | **0.9540** | 0.7831 | 0.9921 |
-
-> All numbers verified from checkpoint files: `best_lstm.pt`, `best_bilstm.pt`, `best_rlstm.pt`.
+*Tables 1‑5 are stored in `results/tables/` as LaTeX and CSV files.*
 
 ---
 
@@ -239,7 +173,7 @@ python plot_and_export.py
 
 ## Keywords
 
-ECG Arrhythmia Classification, Explainable AI, Trustworthy AI, BiLSTM, Residual Memory Control, Adversarial Robustness, FGSM, PGD, Biomedical Signal Processing, Deep Learning, MIT-BIH
+ECG Arrhythmia Classification, Explainable AI, Trustworthy AI, BiLSTM, Residual Memory Control, Adversarial Robustness, FGSM, PGD, Biomedical Signal Processing, Deep Learning, MIT‑BIH
 
 ---
 

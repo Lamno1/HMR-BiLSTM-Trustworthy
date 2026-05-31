@@ -51,7 +51,6 @@ def pgd_attack(model, x, y, epsilon, alpha, steps, criterion, random_start=True)
     for _ in range(steps):
         x_adv.requires_grad_(True)
         outputs = model(x_adv)
-        # Use criterion instead of F.cross_entropy
         loss, _ = criterion(outputs, y, r_fwd=None, r_bwd=None)
         model.zero_grad()
         loss.backward()

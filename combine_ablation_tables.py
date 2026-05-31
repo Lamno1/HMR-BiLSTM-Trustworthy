@@ -39,6 +39,8 @@ for variant, d in clean_metrics.items():
         'F1-Clean': f"{d['f1_macro']:.4f}",
         'F1-Adv (0.02)': rob.get('fgsm_f1_002', '-'),
         'F1-Adv (0.05)': rob.get('fgsm_f1_005', '-'),
+        # F1-S/F1-V = per-class F1 on clean test set (Supraventricular / Ventricular)
+        # This matches Table 5 in the paper, NOT robustness metrics.
         'F1-S': f"{d['f1_s']:.4f}",
         'F1-V': f"{d['f1_v']:.4f}",
         'F1-F': f"{d['f1_f']:.4f}",

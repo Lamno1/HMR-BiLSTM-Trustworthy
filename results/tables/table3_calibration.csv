@@ -1,4 +1,4 @@
 Model,ECE (↓),Brier Score (↓),ECE Grade,Brier Grade
-LSTM,0.0056,0.0461,Excellent,Excellent
-BiLSTM,0.0080,0.0542,Excellent,Good
+BiLSTM,0.0136,0.0595,Excellent,Good
+LSTM,0.0158,0.0616,Excellent,Good
 HMR-BiLSTM,0.0397,0.0444,Good,Excellent

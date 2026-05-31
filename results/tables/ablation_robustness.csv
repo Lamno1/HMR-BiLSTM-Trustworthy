@@ -1,6 +1,9 @@
 variant,label,clean_f1,fgsm_f1_002,fgsm_asr_002,fgsm_f1_005,pgd_f1_002,pgd_asr_002,pgd_f1_005
-full,HMR-BiLSTM (full),0.8804,0.8362,0.0136,0.7679,-,-,-
-mean_pool,Mean-Pool (no attention),0.8506,0.8174,0.0115,0.7541,-,-,-
-no_adv,No-Adv-Training,0.9024,0.8046,0.0346,0.5590,-,-,-
-no_interaction,No-Interaction (m_t=0),0.8793,0.8331,0.0139,0.7660,-,-,-
-no_smooth,No-Smoothness (lambda=0),0.8919,0.8389,0.0162,0.7613,-,-,-
+full,HMR-BiLSTM (full),0.8804,0.8362,0.0136,0.7679,0.8307,0.0155,0.7283
+mean_pool,Mean-Pool (no attention),0.8506,0.8174,0.0115,0.7541,0.8153,0.0128,0.7294
+no_adv,No-Adv-Training,0.9024,0.8046,0.0346,0.5590,0.7580,0.0604,0.4866
+no_interaction,No-Interaction (m_t=0),0.8793,0.8331,0.0139,0.7661,0.8261,0.0172,0.7291
+no_smooth,No-Smoothness (lambda=0),0.8919,0.8389,0.0162,0.7613,0.8304,0.0192,0.7197
+no_cnn,No-CNN (raw input),0.8470,0.8007,0.0156,0.7168,0.7996,0.0161,0.7045
+no_hybrid,No-Hybrid-Path (c_t = c_rmc),0.8606,0.8160,0.0181,0.7359,0.8107,0.0204,0.6997
+no_rmc,No-RMC (c_t = c_lstm),0.8840,0.8264,0.0156,0.7519,0.8206,0.0178,0.7138
