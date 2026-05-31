@@ -115,6 +115,14 @@ VARIANTS = {
         "use_hybrid": False,
         "label": "No-Hybrid-Path (c_t = c_rmc)",
     },
+    "no_interaction": {
+        "use_rmc": True,
+        "use_cnn": True,
+        "use_attention": True,
+        "use_hybrid": True,
+        "use_interaction": False,
+        "label": "No-Interaction (m_t=0)",
+    },
 }
 
 
@@ -277,6 +285,7 @@ def train_variant(variant_name, variant_flags, cfg, device,
         use_hybrid=variant_flags.get("use_hybrid", True),  # default True
         use_cnn=variant_flags["use_cnn"],
         use_attention=variant_flags["use_attention"],
+        use_interaction=variant_flags.get("use_interaction", True),
     ).to(device)
 
     n_params = sum(p.numel() for p in model.parameters() if p.requires_grad)
@@ -470,9 +479,9 @@ def main():
     parser.add_argument(
         "--variants", nargs="*",
         choices=["full", "no_rmc", "no_cnn", "mean_pool",
-                 "no_smooth", "no_adv", "no_hybrid"],
+                 "no_smooth", "no_adv", "no_hybrid", "no_interaction"],
         default=["full", "no_rmc", "no_cnn", "mean_pool",
-                 "no_smooth", "no_adv", "no_hybrid"],
+                 "no_smooth", "no_adv", "no_hybrid", "no_interaction"],
         help="Variants to train. Default: all 7.",
     )
     parser.add_argument(

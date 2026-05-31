@@ -88,12 +88,13 @@ class RLSTMCell(nn.Module):
 
     def __init__(self, input_size: int, hidden_size: int,
                  dropout: float = 0.1, use_rmc: bool = True,
-                 use_hybrid: bool = True):
+                 use_hybrid: bool = True, use_interaction: bool = True):
         super().__init__()
         self.input_size  = input_size
         self.hidden_size = hidden_size
         self.use_rmc     = use_rmc
         self.use_hybrid  = use_hybrid  # chỉ có hiệu lực khi use_rmc=True
+        self.use_interaction = use_interaction
 
         # LSTM gates (luôn có)
         self.W_x = nn.Linear(input_size,  4 * hidden_size)
@@ -152,10 +153,14 @@ class RLSTMCell(nn.Module):
             # === Bước 2: Interaction term ===
             Wc_c = self.W_c(c_prev)
             Wh_h = self.W_h_rmc(h_prev)
-            m_t  = Wc_c * Wh_h
+            if self.use_interaction:
+                m_t = Wc_c * Wh_h
+                combined_rmc = Wc_c + Wh_h + m_t
+            else:
+                combined_rmc = Wc_c + Wh_h
 
             # === Bước 3: Residual gate ===
-            r_t = torch.sigmoid(self.layer_norm(Wc_c + Wh_h + m_t))
+            r_t = torch.sigmoid(self.layer_norm(combined_rmc))
 
             # === Bước 4: Memory decomposition ===
             c_keep = (f_t + r_t * (1.0 - f_t)) * c_prev
@@ -210,12 +215,13 @@ class RLSTMCell(nn.Module):
 # =============================================================================
 class RLSTMLayer(nn.Module):
     def __init__(self, input_size, hidden_size, dropout=0.1,
-                 use_rmc=True, use_hybrid=True):
+                 use_rmc=True, use_hybrid=True, use_interaction=True):
         super().__init__()
         self.hidden_size = hidden_size
         self.cell = RLSTMCell(input_size, hidden_size,
                               dropout=dropout, use_rmc=use_rmc,
-                              use_hybrid=use_hybrid)
+                              use_hybrid=use_hybrid,  use_interaction=use_interaction)
+#        self.use_interaction = use_interaction
 
     def forward(self, x, h0=None, c0=None):
         B, T, _ = x.size()
@@ -245,7 +251,7 @@ class RLSTMLayer(nn.Module):
 # =============================================================================
 class BiRLSTM(nn.Module):
     def __init__(self, input_size, hidden_size,
-                 num_layers=1, dropout=0.1, use_rmc=True, use_hybrid=True):
+                 num_layers=1, dropout=0.1, use_rmc=True, use_hybrid=True, use_interaction=True):
         super().__init__()
         self.hidden_size = hidden_size
         self.num_layers  = num_layers
@@ -256,11 +262,11 @@ class BiRLSTM(nn.Module):
             layer_in = input_size if i == 0 else 2 * hidden_size
             self.fwd_layers.append(
                 RLSTMLayer(layer_in, hidden_size, dropout=dropout,
-                           use_rmc=use_rmc, use_hybrid=use_hybrid)
+                           use_rmc=use_rmc, use_hybrid=use_hybrid, use_interaction=use_interaction)
             )
             self.bwd_layers.append(
                 RLSTMLayer(layer_in, hidden_size, dropout=dropout,
-                           use_rmc=use_rmc, use_hybrid=use_hybrid)
+                           use_rmc=use_rmc, use_hybrid=use_hybrid, use_interaction=use_interaction)
             )
 
         self.inter_dropout = nn.Dropout(dropout) if num_layers > 1 else None
@@ -314,6 +320,7 @@ class RLSTMClassifier(nn.Module):
         use_hybrid: bool = True,
         use_cnn: bool = True,
         use_attention: bool = True,
+        use_interaction: bool = True,
     ):
     
         super().__init__()
@@ -341,6 +348,7 @@ class RLSTMClassifier(nn.Module):
             dropout=dropout,
             use_rmc=use_rmc,
             use_hybrid=use_hybrid,
+            use_interaction=use_interaction,
         )
 
         # Pooling — Ablation Mean-Pool: thay bằng mean over time axis

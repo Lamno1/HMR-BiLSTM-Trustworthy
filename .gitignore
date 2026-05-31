@@ -11,12 +11,16 @@ __pycache__/
 *.egg
 dist/
 build/
+.pytest_cache/
+*.egg-info/
 
 # ---------- Virtual Environments ----------
 .venv/
 venv/
 env/
 ENV/
+env.bak/
+venv.bak/
 
 # ---------- IDE / Editor ----------
 .vscode/
@@ -26,16 +30,29 @@ ENV/
 *~
 .spyderproject
 .spyproject
+*.sublime-project
+*.sublime-workspace
 
 # ---------- OS ----------
 Thumbs.db
 .DS_Store
 desktop.ini
+.Spotlight-V100
+.Trashes
 
 # ---------- Data (large raw files only) ----------
 data/raw/
 
-# ---------- Temporary / utility ----------
+# ---------- Temporary / utility / logs ----------
+*.log
+*.tmp
 check_progress.py
 tempCodeRunnerFile.py
-*.log
+*.ipynb_checkpoints
+.ipynb_checkpoints/
+
+# ---------- Results (logs only, keep tables & figures) ----------
+# results/ is tracked, but individual logs may be regenerated
+results/logs/*.json
+results/logs/*.tmp
+

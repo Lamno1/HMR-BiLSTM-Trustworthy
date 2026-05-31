@@ -34,6 +34,7 @@ def load_ablation_model(checkpoint_path, device):
         use_hybrid=variant_flags.get("use_hybrid", True),
         use_cnn=variant_flags.get("use_cnn", True),
         use_attention=variant_flags.get("use_attention", True),
+        use_interaction=variant_flags.get("use_interaction", True),
     ).to(device)
     
     model.load_state_dict(ckpt["model_state"], strict=True)
@@ -108,7 +109,7 @@ def main():
                 fgsm_res.append(r)
                 
             # evaluate PGD (skipped for ablation to save time)
-            # pgd_res = evaluate_pgd_grid(model, test_loader, device, criterion, args.epsilons, alpha=0.005, steps=20)
+            pgd_res = evaluate_pgd_grid(model, test_loader, device, criterion, args.epsilons, alpha=0.005, steps=20)
             
             clean_f1 = fgsm_res[0]["macro_f1"]
             
@@ -127,12 +128,12 @@ def main():
             row["fgsm_f1_005"] = f"{r05_fgsm['macro_f1']:.4f}"
             
             # PGD (skipped)
-            # r02_pgd = min(pgd_res, key=lambda r: abs(r["epsilon"] - 0.02))
-            row["pgd_f1_002"] = "-"
-            row["pgd_asr_002"] = "-"
+            r02_pgd = min(pgd_res, key=lambda r: abs(r["epsilon"] - 0.02))
+            row["pgd_f1_002"] = f"{r02_pgd['macro_f1']:.4f}"   
+            row["pgd_asr_002"] = f"{r02_pgd['attack_success_rate']:.4f}"
             
-            # r05_pgd = min(pgd_res, key=lambda r: abs(r["epsilon"] - 0.05))
-            row["pgd_f1_005"] = "-"
+            r05_pgd = min(pgd_res, key=lambda r: abs(r["epsilon"] - 0.05))
+            row["pgd_f1_005"] = f"{r05_pgd['macro_f1']:.4f}"
             
             results.append(row)
             
