@@ -144,50 +144,87 @@ def main():
             all_preds.append(model(b).argmax(dim=-1).cpu().numpy())
     preds_all = np.concatenate(all_preds)
 
-    # Integrated Gradients — one sample per class (0-3)
+    # ── Load shared_idx_c from SHAP results.json (same beats SHAP used for shap_shared_top10) ──
+    shap_results_path = paths["out_explain"] / "results.json"
+    shared_idx_c: dict = {}     # cls_name (str) -> list[int]
+    shap_shared_top10: dict = {}
+    if shap_results_path.exists():
+        with open(shap_results_path, "r", encoding="utf-8") as f:
+            shap_results = json.load(f)
+        shared_idx_c   = shap_results.get("metrics", {}).get("shared_idx_c",    {})
+        shap_shared_top10 = shap_results.get("metrics", {}).get("shap_shared_top10", {})
+        if shared_idx_c:
+            print(f"  Loaded shared_idx_c from SHAP results: "
+                  f"{ {cn: len(v) for cn, v in shared_idx_c.items()} }")
+        else:
+            print("  Warning: shared_idx_c not found in SHAP results — "
+                  "will fall back to single-sample IG.")
+
+    # — Integrated Gradients —
     ig = IntegratedGradients(model)
-    n_steps = 50
+    n_steps  = 50
     ig_stats = {}
+    SHARED_N = 30   # kept in sync with shap_analysis.py constant
 
     for cls, fname in PLOT_CLASSES.items():
         cls_label = CLASS_NAMES[cls]
+        cn = cls_label.split()[0]   # e.g. "N", "S", "V", "F"
         print(f"Computing IG for class {cls_label}...")
 
-        idx = select_one_sample_per_class(X_test, y_test, preds_all, cls, rng)
-        if idx is None:
-            print(f"  Warning: no sample found for class {cls_label}, skipping.")
-            continue
+        # — Determine sample set: shared if available, else single-sample fallback —
+        use_shared = cn in shared_idx_c and len(shared_idx_c[cn]) > 0
+        if use_shared:
+            idx_list = shared_idx_c[cn]   # list[int], already correctly-classified beats
+        else:
+            idx_single = select_one_sample_per_class(X_test, y_test, preds_all, cls, rng)
+            if idx_single is None:
+                print(f"  Warning: no sample found for {cls_label}, skipping.")
+                continue
+            idx_list = [idx_single]
 
-        x = torch.from_numpy(X_test[idx:idx+1]).to(device)   # (1, T, 1)
-        baseline = torch.zeros_like(x)
+        # — Average |IG attribution| over all shared beats (same basis as SHAP) —
+        all_attrs = []
+        deltas    = []
+        for idx in idx_list:
+            x        = torch.from_numpy(X_test[idx:idx+1]).to(device)  # (1, T, 1)
+            baseline = torch.zeros_like(x)
+            attrs_i, delta_i = ig.attribute(
+                x, baseline, target=cls,
+                n_steps=n_steps, return_convergence_delta=True
+            )
+            attr_np = attrs_i.squeeze().cpu().detach().numpy()
+            if attr_np.ndim > 1:
+                attr_np = attr_np.squeeze(-1)
+            all_attrs.append(attr_np)
+            deltas.append(float(delta_i.item()))
 
-        # Compute IG attributions for target class
-        attrs, delta = ig.attribute(
-            x, baseline, target=cls,
-            n_steps=n_steps, return_convergence_delta=True
-        )
-        attribution = attrs.squeeze().cpu().detach().numpy()   # (T,) or (T,1)
-        if attribution.ndim > 1:
-            attribution = attribution.squeeze(-1)
-        signal = X_test[idx].squeeze()                        # (T,)
+        attribution_mean = np.mean(np.abs(all_attrs), axis=0)  # (T,) mean |IG|
+        mean_delta       = float(np.mean(deltas))
+        top10 = np.argsort(attribution_mean)[::-1][:10].tolist()
+        print(f"  n_beats={len(idx_list)}  mean|IG| max={attribution_mean.max():.4f}  "
+              f"mean_conv_delta={mean_delta:.4f}  top3={top10[:3]}")
 
-        pred_lbl = CLASS_NAMES.get(int(preds_all[idx]), str(preds_all[idx]))
-        true_lbl = CLASS_NAMES[cls]
-        title = (f"Integrated Gradients — {cls_label}\n"
-                 f"True: {true_lbl}  |  Predicted: {pred_lbl}  |  "
-                 f"Convergence delta: {delta.item():.4f}")
+        # — Plot with first representative beat —
+        repr_idx   = idx_list[0]
+        signal     = X_test[repr_idx].squeeze()
+        pred_lbl   = CLASS_NAMES.get(int(preds_all[repr_idx]), str(preds_all[repr_idx]))
+        true_lbl   = CLASS_NAMES[cls]
+        n_beats    = len(idx_list)
+        title = (f"Integrated Gradients — {cls_label}  (mean |IG| over {n_beats} beats)\n"
+                 f"Representative beat — True: {true_lbl}  |  Predicted: {pred_lbl}  |  "
+                 f"Mean conv. delta: {mean_delta:.4f}")
+        plot_ig(signal, attribution_mean, cls_label,
+                paths["out_explain"] / fname, title)
 
-        plot_ig(signal, attribution, cls_label, paths["out_explain"] / fname, title)
-
-        # Store stats
-        top10 = np.argsort(np.abs(attribution))[::-1][:10].tolist()
-        ig_stats[CLASS_NAMES[cls].split()[0]] = {
+        ig_stats[cn] = {
             "top10_timesteps_ig": top10,
-            "convergence_delta": float(delta.item()),
-            "max_abs_attr": float(np.abs(attribution).max())
+            "n_beats_averaged":   n_beats,
+            "mean_convergence_delta": mean_delta,
+            "max_mean_abs_attr":  float(attribution_mean.max()),
+            "used_shared_basis":  use_shared,
         }
 
-    # Save IG-specific JSON
+    # — Save IG-specific JSON —
     ig_json = {
         "experiment_version": cfg["experiment"]["version"],
         "run_id": run_id,
@@ -201,28 +238,39 @@ def main():
         json.dump(ig_json, f, indent=2)
     print(f"  [OK] ig_results.json")
 
-    # Compute Jaccard Similarity with SHAP (if available)
-    shap_results_path = paths["out_explain"] / "results.json"
-    if shap_results_path.exists():
-        with open(shap_results_path, "r", encoding="utf-8") as f:
-            shap_results = json.load(f)
-        
-        consistency = {}
-        for cls_name, ig_data in ig_stats.items():
-            if cls_name in shap_results.get("metrics", {}).get("per_class", {}):
-                shap_top10 = set(shap_results["metrics"]["per_class"][cls_name].get("top10_timesteps", []))
-                ig_top10 = set(ig_data["top10_timesteps_ig"])
-                
-                if shap_top10 and ig_top10:
-                    jaccard = jaccard_with_tolerance(shap_top10, ig_top10, tolerance=2)
-                    consistency[cls_name] = float(jaccard)
-                    print(f"  SHAP vs IG Jaccard Similarity with tolerance ({cls_name}): {jaccard:.4f}")
-        
+    # — Jaccard(SHAP, IG) — both now on the same shared beats —
+    # shap_shared_top10 comes from shap_analysis.py averaged over shared_idx_c.
+    # ig_stats[cn]["top10_timesteps_ig"] is averaged over the same idx_list.
+    # Comparison is now apples-to-apples.
+    consistency = {}
+    if shap_shared_top10:
+        for cn, ig_data in ig_stats.items():
+            shap_top10 = set(shap_shared_top10.get(cn, []))
+            ig_top10   = set(ig_data["top10_timesteps_ig"])
+            if shap_top10 and ig_top10:
+                jaccard = jaccard_with_tolerance(shap_top10, ig_top10, tolerance=2)
+                consistency[cn] = {
+                    "jaccard_shared_basis": float(jaccard),
+                    "shap_top10": list(shap_top10),
+                    "ig_top10":   list(ig_top10),
+                    "n_beats_shared": len(shared_idx_c.get(cn, [])),
+                    "note": "Both averaged over same correctly-classified beats per class.",
+                }
+                print(f"  Jaccard(SHAP_shared, IG_shared) [{cn}]: {jaccard:.4f}  "
+                      f"(n_beats={len(shared_idx_c.get(cn, []))})")
         if consistency:
             consistency_path = paths["out_explain"] / "shap_ig_consistency.json"
             with open(consistency_path, "w", encoding="utf-8") as f:
-                json.dump({"jaccard_similarity": consistency}, f, indent=2)
-            print(f"  [OK] Saved consistency to {consistency_path}")
+                json.dump({"jaccard_shared_basis": consistency,
+                           "methodology": (
+                               "Both SHAP and IG top-10 computed by averaging |attribution| "
+                               "over the SAME up-to-30 correctly-classified beats per class. "
+                               "jaccard_with_tolerance(tolerance=2) applied."
+                           )}, f, indent=2)
+            print(f"  [OK] shap_ig_consistency.json (shared-basis Jaccard)")
+    else:
+        print("  Note: SHAP shared_top10 not available — run shap_analysis.py first "
+              "to enable Jaccard comparison.")
 
     print("\nIntegrated Gradients analysis completed.")
 

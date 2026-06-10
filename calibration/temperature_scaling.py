@@ -37,8 +37,8 @@ class TemperatureScaling(nn.Module):
                 logits_list.append(logits.cpu())
                 labels_list.append(y)
                 
-        logits = torch.cat(logits_list)
-        labels = torch.cat(labels_list)
+        logits = torch.cat(logits_list).to(device)
+        labels = torch.cat(labels_list).to(device)
         
         optimizer = optim.LBFGS([self.temperature], lr=lr, max_iter=max_iter)
         nll_criterion = nn.CrossEntropyLoss()

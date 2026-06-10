@@ -208,7 +208,22 @@ def main():
     preds_all = np.concatenate(all_preds)
     print(f"  Accuracy: {(preds_all == y_test).mean():.4f}")
 
-    # ── Select samples for detailed per-class analysis ──
+    # ── Shared per-class samples for reproducible Jaccard(SHAP, IG) ──
+    # Both SHAP and IG must use the SAME up-to-30 correctly-classified beats per class.
+    # Using the same samples removes the "population SHAP vs single-beat IG" base mismatch.
+    SHARED_N = 30
+    shared_idx_c: dict = {}   # cls (int) → sorted list of test indices
+    for cls in shap_classes:
+        correct = np.where((y_test == cls) & (preds_all == cls))[0]
+        n_sel = min(SHARED_N, len(correct))
+        if n_sel > 0:
+            shared_idx_c[cls] = sorted(rng.choice(correct, n_sel, replace=False).tolist())
+        else:
+            shared_idx_c[cls] = []
+    all_shared_flat = sorted(set(i for idxs in shared_idx_c.values() for i in idxs))
+    print(f"  Shared per-class samples for Jaccard: { {CLASS_NAMES[c]: len(v) for c, v in shared_idx_c.items()} }")
+
+    # ── Select samples for detailed per-class visualization ──
     print("Selecting samples for detailed per-class analysis...")
     sample_indices = {}
     all_selected_idx = []
@@ -223,10 +238,12 @@ def main():
     n_details = len(unique_selected_idx)
     print(f"  Selected {n_details} unique samples for detailed visualization.")
 
-    # We will compute SHAP on X_sum and X_details together to save time and ensure consistency
-    X_sum = torch.from_numpy(X_test[rng.choice(len(X_test), n_summary, replace=False)]).to(device)
+    # Compute SHAP on X_sum, X_details, and X_shared in one pass
+    X_sum     = torch.from_numpy(X_test[rng.choice(len(X_test), n_summary, replace=False)]).to(device)
     X_details = torch.from_numpy(X_test[unique_selected_idx]).to(device)
-    X_all_explain = torch.cat([X_sum, X_details], dim=0)
+    X_shared  = torch.from_numpy(X_test[all_shared_flat]).to(device)
+    X_all_explain = torch.cat([X_sum, X_details, X_shared], dim=0)
+    n_shared  = len(X_shared)
     n_all = len(X_all_explain)
 
     # GradientExplainer: average over multiple background resamplings.
@@ -256,9 +273,10 @@ def main():
     ]
     print(f"  SHAP averaging complete. Stability note: averaged over {n_shap_runs} runs.")
 
-    # Split back to sum and details
-    shap_vals_summary = [sv[:n_summary] for sv in shap_vals_all]
-    shap_vals_details = [sv[n_summary:] for sv in shap_vals_all]
+    # Split back to sum, details, and shared
+    shap_vals_summary = [sv[:n_summary]                          for sv in shap_vals_all]
+    shap_vals_details = [sv[n_summary:n_summary + n_details]     for sv in shap_vals_all]
+    shap_vals_shared  = [sv[n_summary + n_details:]              for sv in shap_vals_all]
 
     # Global importance: mean |SHAP| over classes 0-3 and samples
     mean_imp = np.stack(
@@ -321,6 +339,22 @@ def main():
             "misclassified_found": int(len(mi))
         }
 
+    # ── Per-class SHAP top-10 on SHARED samples (for valid Jaccard with IG) ──
+    # Averaged over the same up-to-30 correctly-classified beats per class.
+    shap_shared_top10: dict = {}
+    for cls in shap_classes:
+        cn = CLASS_NAMES[cls]
+        idx_c = shared_idx_c.get(cls, [])
+        if len(idx_c) == 0:
+            shap_shared_top10[cn] = []
+            continue
+        # Positions of idx_c within all_shared_flat
+        pos_c = [all_shared_flat.index(i) for i in idx_c]
+        sv_c  = shap_vals_shared[cls][pos_c]          # (n, T, 1)
+        cls_imp_shared = np.abs(sv_c).squeeze(-1).mean(axis=0)  # (T,)
+        shap_shared_top10[cn] = np.argsort(cls_imp_shared)[::-1][:10].tolist()
+        print(f"  [Shared SHAP] {cn}: top-3 timesteps = {shap_shared_top10[cn][:3]}")
+
     # results.json
     results_json = {
         "experiment_version": cfg["experiment"]["version"],
@@ -331,12 +365,15 @@ def main():
         "metrics": {
             "shap_summary": "shap_summary_plot.png",
             "top_global_timesteps": top_idx[:3].tolist(),
-            "per_class": top_per_class
+            "per_class": top_per_class,
+            # Shared-basis top-10: averaged over same idx_c used by IG → valid Jaccard
+            "shap_shared_top10": shap_shared_top10,
+            "shared_idx_c": {CLASS_NAMES[c]: idxs for c, idxs in shared_idx_c.items()},
         }
     }
     with open(paths["out_explain"] / "results.json", "w", encoding="utf-8") as f:
         json.dump(results_json, f, indent=2)
-    print(f"  [OK] results.json")
+    print(f"  [OK] results.json (includes shap_shared_top10 for Jaccard)")
 
     print("\nSHAP analysis completed.")
 
