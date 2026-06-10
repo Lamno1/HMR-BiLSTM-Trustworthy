@@ -120,14 +120,18 @@ def run_study():
             
     clean_acc = accuracy_score(clean_labels, clean_preds)
     clean_f1 = f1_score(clean_labels, clean_preds, average="macro", zero_division=0)
+    clean_per_class_f1 = {str(c): float(f1_score(clean_labels, clean_preds,
+                                                  labels=[c], average="micro", zero_division=0))
+                          for c in range(5)}
     print(f"  Clean Accuracy: {clean_acc:.4f} | Clean Macro F1: {clean_f1:.4f}")
-    
+
     results = {
         "epsilon": EPSILON,
         "alpha": ALPHA,
         "clean": {
             "accuracy": float(clean_acc),
-            "f1_macro": float(clean_f1)
+            "f1_macro": float(clean_f1),
+            "f1_per_class": clean_per_class_f1
         },
         "convergence": []
     }
@@ -166,14 +170,18 @@ def run_study():
         elapsed = time.time() - start_time
         adv_acc = accuracy_score(adv_labels, adv_preds)
         adv_f1 = f1_score(adv_labels, adv_preds, average="macro", zero_division=0)
+        adv_per_class_f1 = {str(c): float(f1_score(adv_labels, adv_preds,
+                                                    labels=[c], average="micro", zero_division=0))
+                            for c in range(5)}
         asr = asr_numerator / orig_correct_count if orig_correct_count > 0 else 0.0
-        
+
         print(f"  Steps: {steps:<3} | Acc: {adv_acc:.4f} | F1: {adv_f1:.4f} | ASR: {asr:.4f} | Time: {elapsed:.1f}s")
-        
+
         results["convergence"].append({
             "steps": steps,
             "accuracy": float(adv_acc),
             "f1_macro": float(adv_f1),
+            "f1_per_class": adv_per_class_f1,
             "attack_success_rate": float(asr),
             "time_sec": float(elapsed)
         })

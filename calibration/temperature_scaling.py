@@ -141,10 +141,19 @@ def main():
     print(f"  NLL:   {metrics_before['nll']:.4f} -> {metrics_after['nll']:.4f}")
     print(f"  Brier: {metrics_before['brier']:.4f} -> {metrics_after['brier']:.4f}")
     
-    print(f"\nClasswise ECE (After scaling):")
+    print(f"\nClasswise ECE (After scaling) - OvR scheme:")
     for c, ece_c in metrics_after["classwise_ece"].items():
         print(f"  Class {c}: {ece_c:.4f}")
-    
+
+    print(f"\nConditional ECE (After scaling) - model prediction scheme:")
+    for c, info in metrics_after["conditional_ece"].items():
+        ece_val = info.get("ece")
+        n_pred = info.get("n", 0)
+        if ece_val is None:
+            print(f"  Class {c}: None (n_predicted={n_pred} < threshold)")
+        else:
+            print(f"  Class {c}: {ece_val:.4f} (n_predicted={n_pred})")
+
     # 3. Save results to JSON (matching JSON report contract)
     results_json = {
         "experiment_version": cfg["experiment"]["version"],
@@ -162,6 +171,7 @@ def main():
             "brier_before": metrics_before["brier"],
             "brier_after": metrics_after["brier"],
             "classwise_ece_after": metrics_after["classwise_ece"],
+            "conditional_ece_after": metrics_after["conditional_ece"],
             "temperature": optimal_temp
         }
     }
