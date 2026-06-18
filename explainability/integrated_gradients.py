@@ -1,20 +1,15 @@
 """
 T3 — Integrated Gradients for Trustworthy ECG Classification (captum).
 
-Annotates QRS, P-wave, T-wave regions on ECG signal.
-Uses zero-signal as baseline.
-
-Outputs:
-  outputs/<run_id>/explainability/
-    ig_normal.png
-    ig_pvc.png      (class V)
-    ig_apc.png      (class S)
-    ig_fusion.png   (class F)
-    ig_results.json (merged into explainability/results.json by T8)
+Calculates Integrated Gradients and compares with SHAP on shared beats.
+Now updated with:
+1. Multi-beat onset% + Wilson CI (n=80) for IG to compare directly with SHAP.
+2. Self-healing SHAP directory lookup to prevent run ID mismatch.
 """
 
 import json
 import yaml
+import math
 import numpy as np
 import torch
 import torch.nn.functional as F
@@ -28,12 +23,17 @@ from captum.attr import IntegratedGradients
 from configs.paths import get_run_id, build_paths, RLSTM_CKPT, get_checkpoint_hash, INTER_TEST
 from report_results import load_hmr_bilstm
 
-
 CLASS_NAMES   = {0: "N (Normal)", 1: "S (APC)", 2: "V (PVC)", 3: "F (Fusion)"}
 PLOT_CLASSES  = {0: "ig_normal.png", 1: "ig_apc.png", 2: "ig_pvc.png", 3: "ig_fusion.png"}
+CLS_MAP       = {"N": 0, "S": 1, "V": 2, "F": 3}
+CLASSES       = ["N", "S", "V", "F"]
+
+ONSET_ZONE    = (0, 45)
+QRS_WIN       = (85, 97)
+N_KIEM1       = 80
+SEED          = 42
 
 # Approximate ECG region boundaries for MIT-BIH 187-sample beat
-# These are rough heuristics; the plot just annotates regions visually
 ECG_REGIONS = {
     "P-wave":  (10,  40),
     "QRS":     (60,  100),
@@ -41,17 +41,16 @@ ECG_REGIONS = {
 }
 
 
-def select_one_sample_per_class(X, y, preds, cls, rng):
-    """Pick one correctly classified sample for the class, or any true class sample."""
-    correct = np.where((y == cls) & (preds == cls))[0]
-    if len(correct) > 0:
-        idx = rng.choice(correct)
-    else:
-        fallback = np.where(y == cls)[0]
-        if len(fallback) == 0:
-            return None
-        idx = rng.choice(fallback)
-    return int(idx)
+def wilson_ci(k, n, z=1.96):
+    """Wilson 95% CI cho tỉ lệ k/n. Trả (lo, hi) dạng phần trăm."""
+    if n == 0:
+        return (0.0, 0.0)
+    p  = k / n
+    d  = z * math.sqrt(p * (1 - p) / n + z**2 / (4 * n**2))
+    c  = 1 + z**2 / n
+    lo = (p + z**2 / (2 * n) - d) / c
+    hi = (p + z**2 / (2 * n) + d) / c
+    return (max(0.0, lo), min(1.0, hi))
 
 
 def plot_ig(signal, attribution, cls_name, save_path, title):
@@ -116,20 +115,41 @@ def main():
 
     run_id = get_run_id(cfg)
     paths  = build_paths(run_id)
-    paths["out_explain"].mkdir(parents=True, exist_ok=True)
+
+    # ── Self-healing SHAP directory lookup ──
+    shap_results_path = paths["out_explain"] / "results.json"
+    output_dir = paths["out_explain"]
+
+    if not shap_results_path.exists():
+        print(f"  Warning: results.json not found at {shap_results_path}")
+        print("  Searching for the latest SHAP results directory in outputs/...")
+        candidate_paths = sorted(
+            Path("outputs").glob("*/explainability/results.json"),
+            key=lambda p: p.stat().st_mtime,
+            reverse=True
+        )
+        if candidate_paths:
+            shap_results_path = candidate_paths[0]
+            output_dir = shap_results_path.parent
+            print(f"  Found latest SHAP results at: {shap_results_path}")
+            print(f"  Updating IG output directory to: {output_dir}")
+        else:
+            print("  No SHAP results found anywhere in outputs/.")
+
+    output_dir.mkdir(parents=True, exist_ok=True)
 
     seed = cfg.get("seed", 42)
     rng  = np.random.default_rng(seed)
 
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
-    print(f"Device: {device} | Run ID: {run_id}")
+    print(f"Device: {device} | Output Directory: {output_dir}")
 
     # Load model
     print("Loading model...")
     model, _ = load_hmr_bilstm(RLSTM_CKPT, device)
     model.eval()
 
-    # Load test data & get predictions (using centralized INTER_TEST path)
+    # Load test data & get predictions
     print("Loading test data...")
     print(f"  Using: {INTER_TEST}")
     test   = np.load(INTER_TEST)
@@ -144,8 +164,7 @@ def main():
             all_preds.append(model(b).argmax(dim=-1).cpu().numpy())
     preds_all = np.concatenate(all_preds)
 
-    # ── Load shared_idx_c from SHAP results.json (same beats SHAP used for shap_shared_top10) ──
-    shap_results_path = paths["out_explain"] / "results.json"
+    # ── Load shared_idx_c from SHAP results.json ──
     shared_idx_c: dict = {}     # cls_name (str) -> list[int]
     shap_shared_top10: dict = {}
     if shap_results_path.exists():
@@ -157,35 +176,44 @@ def main():
             print(f"  Loaded shared_idx_c from SHAP results: "
                   f"{ {cn: len(v) for cn, v in shared_idx_c.items()} }")
         else:
-            print("  Warning: shared_idx_c not found in SHAP results — "
-                  "will fall back to single-sample IG.")
+            print("  Warning: shared_idx_c not found in SHAP results — falling back to empty.")
+    else:
+        print("  Warning: SHAP results.json not found — Jaccard analysis will be skipped.")
 
     # — Integrated Gradients —
     ig = IntegratedGradients(model)
     n_steps  = 50
     ig_stats = {}
-    SHARED_N = 30   # kept in sync with shap_analysis.py constant
+    k1_results = {}
+    consistency = {}
 
     for cls, fname in PLOT_CLASSES.items():
         cls_label = CLASS_NAMES[cls]
         cn = cls_label.split()[0]   # e.g. "N", "S", "V", "F"
-        print(f"Computing IG for class {cls_label}...")
+        print(f"\nComputing IG for class {cls_label}...")
 
-        # — Determine sample set: shared if available, else single-sample fallback —
-        use_shared = cn in shared_idx_c and len(shared_idx_c[cn]) > 0
-        if use_shared:
-            idx_list = shared_idx_c[cn]   # list[int], already correctly-classified beats
-        else:
-            idx_single = select_one_sample_per_class(X_test, y_test, preds_all, cls, rng)
-            if idx_single is None:
-                print(f"  Warning: no sample found for {cls_label}, skipping.")
-                continue
-            idx_list = [idx_single]
+        # — Sample selection for 80 beats (similar to diag_verify_coupling_v2.py) —
+        idx_shared = shared_idx_c.get(cn, [])
+        correct_all = np.where((y_test == cls) & (preds_all == cls))[0].tolist()
 
-        # — Average |IG attribution| over all shared beats (same basis as SHAP) —
+        # Build N_KIEM1 beats index list
+        idx_kiem1 = list(idx_shared)
+        remaining = [i for i in correct_all if i not in idx_kiem1]
+        n_needed = N_KIEM1 - len(idx_kiem1)
+        if n_needed > 0 and len(remaining) > 0:
+            rng_k1 = np.random.default_rng(SEED)
+            extra = rng_k1.choice(remaining, min(n_needed, len(remaining)), replace=False).tolist()
+            idx_kiem1.extend(extra)
+
+        n_beats = len(idx_kiem1)
+        if n_beats == 0:
+            print(f"  Warning: no correctly predicted beats found for {cls_label}, skipping.")
+            continue
+
+        print(f"  Running IG on {n_beats} beats...")
         all_attrs = []
         deltas    = []
-        for idx in idx_list:
+        for idx in idx_kiem1:
             x        = torch.from_numpy(X_test[idx:idx+1]).to(device)  # (1, T, 1)
             baseline = torch.zeros_like(x)
             attrs_i, delta_i = ig.attribute(
@@ -198,30 +226,72 @@ def main():
             all_attrs.append(attr_np)
             deltas.append(float(delta_i.item()))
 
-        attribution_mean = np.mean(np.abs(all_attrs), axis=0)  # (T,) mean |IG|
-        mean_delta       = float(np.mean(deltas))
-        top10 = np.argsort(attribution_mean)[::-1][:10].tolist()
-        print(f"  n_beats={len(idx_list)}  mean|IG| max={attribution_mean.max():.4f}  "
-              f"mean_conv_delta={mean_delta:.4f}  top3={top10[:3]}")
+        # KIỂM 1: Onset-zone [0, 45) percentage and Wilson CI
+        peak_ts  = [int(np.abs(attr).argmax()) for attr in all_attrs]
+        k_onset  = sum(ONSET_ZONE[0] <= t < ONSET_ZONE[1] for t in peak_ts)
+        k_qrs    = sum(QRS_WIN[0]    <= t < QRS_WIN[1]    for t in peak_ts)
+        k_tend   = sum(145           <= t < 187            for t in peak_ts)
+        pct      = k_onset / n_beats
+        lo, hi   = wilson_ci(k_onset, n_beats)
+
+        k1_results[cn] = {
+            "k": k_onset,
+            "n": n_beats,
+            "pct": pct,
+            "ci": (lo, hi),
+            "peak_ts": peak_ts
+        }
+
+        print(f"  Onset [0,45) :  {k_onset:2d}/{n_beats}  = {pct:.1%}  [Wilson 95% CI: {lo:.1%} – {hi:.1%}]")
+        print(f"  QRS  [85,97) :  {k_qrs:2d}/{n_beats}  = {k_qrs/n_beats:.1%}")
+        print(f"  T-end[145,187): {k_tend:2d}/{n_beats}  = {k_tend/n_beats:.1%}")
+
+        # Top-10 over the shared beats (first len(idx_shared) elements of all_attrs)
+        n_shared = len(idx_shared)
+        if n_shared > 0:
+            shared_attrs = all_attrs[:n_shared]
+            attribution_mean_shared = np.mean(np.abs(shared_attrs), axis=0)
+            top10_shared = np.argsort(attribution_mean_shared)[::-1][:10].tolist()
+            for idx in top10_shared:
+                assert 0 <= idx < 187, f"[INDEX CHECK FAIL] {cn} IG top10 index {idx} out of bounds (T=187)"
+        else:
+            top10_shared = []
+
+        # Jaccard consistency calculation
+        shap_top10_cn = shap_shared_top10.get(cn, [])
+        jaccard_val = -1.0
+        if n_shared > 0 and shap_top10_cn:
+            jaccard_val = jaccard_with_tolerance(set(shap_top10_cn), set(top10_shared), tolerance=2)
+            consistency[cn] = {
+                "jaccard_shared_basis": float(jaccard_val),
+                "shap_top10": shap_top10_cn,
+                "ig_top10": top10_shared,
+                "n_beats_shared": n_shared
+            }
+            print(f"  Jaccard(SHAP_shared, IG_shared) [{cn}]: {jaccard_val:.4f} (n_beats={n_shared})")
 
         # — Plot with first representative beat —
-        repr_idx   = idx_list[0]
+        repr_idx   = idx_kiem1[0]
         signal     = X_test[repr_idx].squeeze()
         pred_lbl   = CLASS_NAMES.get(int(preds_all[repr_idx]), str(preds_all[repr_idx]))
         true_lbl   = CLASS_NAMES[cls]
-        n_beats    = len(idx_list)
+        mean_delta = float(np.mean(deltas))
         title = (f"Integrated Gradients — {cls_label}  (mean |IG| over {n_beats} beats)\n"
                  f"Representative beat — True: {true_lbl}  |  Predicted: {pred_lbl}  |  "
                  f"Mean conv. delta: {mean_delta:.4f}")
-        plot_ig(signal, attribution_mean, cls_label,
-                paths["out_explain"] / fname, title)
+        
+        # Plot utilizing the mean absolute attribution of the KIỂM 1 beats
+        mean_abs_attribution_plot = np.mean(all_attrs, axis=0)  # Keep signed mean for positive/negative highlights
+        plot_ig(signal, mean_abs_attribution_plot, cls_label, output_dir / fname, title)
 
         ig_stats[cn] = {
-            "top10_timesteps_ig": top10,
-            "n_beats_averaged":   n_beats,
+            "top10_timesteps_ig_shared": top10_shared,
+            "n_beats_kiem1": n_beats,
+            "k_onset": k_onset,
+            "onset_pct": pct,
+            "wilson_ci": (lo, hi),
             "mean_convergence_delta": mean_delta,
-            "max_mean_abs_attr":  float(attribution_mean.max()),
-            "used_shared_basis":  use_shared,
+            "max_mean_abs_attr": float(np.mean(np.abs(all_attrs), axis=0).max()),
         }
 
     # — Save IG-specific JSON —
@@ -231,48 +301,54 @@ def main():
         "checkpoint_hash": get_checkpoint_hash(RLSTM_CKPT),
         "module": "explainability_ig",
         "timestamp": datetime.now().isoformat(),
-        "metrics": ig_stats
+        "metrics": {
+            "ig_stats": ig_stats,
+            "k1_results": k1_results,
+            "consistency": consistency
+        }
     }
-    ig_json_path = paths["out_explain"] / "ig_results.json"
+    ig_json_path = output_dir / "ig_results.json"
     with open(ig_json_path, "w", encoding="utf-8") as f:
         json.dump(ig_json, f, indent=2)
-    print(f"  [OK] ig_results.json")
+    print(f"\n  [OK] ig_results.json")
 
-    # — Jaccard(SHAP, IG) — both now on the same shared beats —
-    # shap_shared_top10 comes from shap_analysis.py averaged over shared_idx_c.
-    # ig_stats[cn]["top10_timesteps_ig"] is averaged over the same idx_list.
-    # Comparison is now apples-to-apples.
-    consistency = {}
-    if shap_shared_top10:
-        for cn, ig_data in ig_stats.items():
-            shap_top10 = set(shap_shared_top10.get(cn, []))
-            ig_top10   = set(ig_data["top10_timesteps_ig"])
-            if shap_top10 and ig_top10:
-                jaccard = jaccard_with_tolerance(shap_top10, ig_top10, tolerance=2)
-                consistency[cn] = {
-                    "jaccard_shared_basis": float(jaccard),
-                    "shap_top10": list(shap_top10),
-                    "ig_top10":   list(ig_top10),
-                    "n_beats_shared": len(shared_idx_c.get(cn, [])),
-                    "note": "Both averaged over same correctly-classified beats per class.",
-                }
-                print(f"  Jaccard(SHAP_shared, IG_shared) [{cn}]: {jaccard:.4f}  "
-                      f"(n_beats={len(shared_idx_c.get(cn, []))})")
-        if consistency:
-            consistency_path = paths["out_explain"] / "shap_ig_consistency.json"
-            with open(consistency_path, "w", encoding="utf-8") as f:
-                json.dump({"jaccard_shared_basis": consistency,
-                           "methodology": (
-                               "Both SHAP and IG top-10 computed by averaging |attribution| "
-                               "over the SAME up-to-30 correctly-classified beats per class. "
-                               "jaccard_with_tolerance(tolerance=2) applied."
-                           )}, f, indent=2)
-            print(f"  [OK] shap_ig_consistency.json (shared-basis Jaccard)")
-    else:
-        print("  Note: SHAP shared_top10 not available — run shap_analysis.py first "
-              "to enable Jaccard comparison.")
+    if consistency:
+        consistency_path = output_dir / "shap_ig_consistency.json"
+        with open(consistency_path, "w", encoding="utf-8") as f:
+            json.dump({
+                "jaccard_shared_basis": consistency,
+                "methodology": (
+                    "Both SHAP and IG top-10 computed by averaging |attribution| "
+                    "over the SAME up-to-30 correctly-classified beats per class. "
+                    "jaccard_with_tolerance(tolerance=2) applied."
+                )
+            }, f, indent=2)
+        print(f"  [OK] shap_ig_consistency.json (shared-basis Jaccard)")
 
-    print("\nIntegrated Gradients analysis completed.")
+    # ════════════════════════════════════════════════════════════════════════════
+    #  TÓM TẮT SỐ THÔ CHO IG
+    # ════════════════════════════════════════════════════════════════════════════
+    print("\n" + "=" * 72)
+    print(" TÓM TẮT SỐ THÔ CHO INTEGRATED GRADIENTS (gửi toàn bộ phần này để đọc)")
+    print("=" * 72)
+    print(f"\nKIỂM 1 (IG) — onset% với Wilson 95% CI (n={N_KIEM1}):")
+    for cn in CLASSES:
+        r = k1_results.get(cn, {"k": 0, "n": 0, "pct": 0.0, "ci": (0.0, 0.0)})
+        print(f"  {cn}: {r['k']}/{r['n']} = {r['pct']:.1%}  [95% CI: {r['ci'][0]:.1%}–{r['ci'][1]:.1%}]")
+        
+    f_pct = k1_results.get("F", {}).get("pct", 0.0)
+    n_pct = k1_results.get("N", {}).get("pct", 0.0)
+    v_pct = k1_results.get("V", {}).get("pct", 0.0)
+    delta_fn = f_pct - n_pct
+    delta_fv = f_pct - v_pct
+    print(f"\n  Δ(F−N) = {delta_fn:+.1%}   Δ(F−V) = {delta_fv:+.1%}")
+    
+    if consistency:
+        print("\nCONSISTENCY JACCARD (SHAP vs IG) TRÊN 30 SHARED BEATS:")
+        for cn, c_data in consistency.items():
+            print(f"  {cn}: Jaccard = {c_data['jaccard_shared_basis']:.4f} (SHAP={c_data['shap_top10'][:5]}..., IG={c_data['ig_top10'][:5]}...)")
+
+    print("\n[integrated_gradients.py] Done.")
 
 
 if __name__ == "__main__":

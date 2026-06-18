@@ -32,14 +32,21 @@ def build_paths(run_id: str) -> dict:
         "out_figures":  root / "figures",
     }
 
+import hashlib
+
 def get_checkpoint_hash(ckpt_path: str) -> str:
-    """Returns the last modified time and size of the checkpoint to uniquely identify it."""
+    """Returns the SHA-1 content hash of the checkpoint to uniquely identify it."""
     try:
         p = Path(ckpt_path)
         if p.exists():
-            mtime = p.stat().st_mtime
-            size = p.stat().st_size
-            return f"mtime_{int(mtime)}_size_{size}"
+            sha1 = hashlib.sha1()
+            with open(ckpt_path, 'rb') as f:
+                while True:
+                    data = f.read(65536)
+                    if not data:
+                        break
+                    sha1.update(data)
+            return sha1.hexdigest()
         return "not_found"
     except Exception:
         return "error"

@@ -485,8 +485,8 @@ def main():
     print(f"  [OK] {confusable_csv}  ({len(confusable_list)} confusable samples total)")
 
     print(f"\n[TracIn] Complete.")
-    print(f"  → Visual: inspect {wave_dir}/ (files with _NOISE flag = two-signal confirmed)")
-    print(f"  → Paper claim: {len(noise_confirmed)} training samples confirmed as "
+    print(f"  -> Visual: inspect {wave_dir}/ (files with _NOISE flag = two-signal confirmed)")
+    print(f"  -> Paper claim: {len(noise_confirmed)} training samples confirmed as "
           f"likely mislabeled by TracIn + model self-disagreement")
 
 

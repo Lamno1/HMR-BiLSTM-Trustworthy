@@ -107,6 +107,10 @@ def evaluate_fgsm(model, dataloader, device, criterion, epsilon=0.02):
         attack_success = 0.0
 
     # Per-class recall (clean vs adversarial) for clinically important classes.
+    f1_clean_all = f1_score(all_labels, all_orig_preds, labels=[0, 1, 2, 3, 4], average=None, zero_division=0)
+    f1_adv_all   = f1_score(all_labels, all_preds, labels=[0, 1, 2, 3, 4], average=None, zero_division=0)
+
+    # Per-class recall (clean vs adversarial) for clinically important classes.
     # recall_score with labels=[cls] gives per-class recall using all samples
     # as denominator for that class — equivalent to TP/(TP+FN).
     per_class_recall_clean = {}
@@ -124,6 +128,9 @@ def evaluate_fgsm(model, dataloader, device, criterion, epsilon=0.02):
         else:
             per_class_recall_clean[f"recall_clean_{name}"] = 0.0
             per_class_recall_adv[f"recall_adv_{name}"] = 0.0
+        
+        per_class_recall_clean[f"f1_clean_{name}"] = float(f1_clean_all[cls])
+        per_class_recall_adv[f"f1_adv_{name}"] = float(f1_adv_all[cls])
 
     result = {
         "epsilon": epsilon,

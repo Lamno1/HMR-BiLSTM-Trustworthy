@@ -79,8 +79,10 @@ def extract_beats():
     # --- 1. Generate Inter-patient split ---
     print("Generating Inter-patient split...")
     # Train: DS1 excluding some for Val
-    val_patients = ['118', '119', '122', '124']
+    val_patients = ['122', '124', '205', '223']
     train_patients = [p for p in DS1 if p not in val_patients]
+    
+    assert set(train_patients).isdisjoint(set(val_patients)), "CRITICAL BUG: Patient overlap detected between train and val!"
     test_patients = DS2
     
     train_beats = [b for b in all_beats if b['patient'] in train_patients]
@@ -123,9 +125,12 @@ def extract_beats():
     # --- Inter-patient Distribution Report ---
     def print_dist(name, y):
         unique, counts = np.unique(y, return_counts=True)
+        # Force padding for 5 classes (0: N, 1: S, 2: V, 3: F, 4: Q) to ensure stable output
+        dist_dict = {u: c for u, c in zip(unique, counts)}
         print(f"  {name}: ", end="")
-        for u, c in zip(unique, counts):
-            print(f"Class {u}: {c} ({c/len(y)*100:.1f}%) | ", end="")
+        for cls in range(5):
+            c = dist_dict.get(cls, 0)
+            print(f"Class {cls}: {c:<5} ({c/len(y)*100:5.1f}%) | ", end="")
         print()
     
     print("\nInter-patient Class Distribution:")

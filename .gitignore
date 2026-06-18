@@ -56,3 +56,13 @@ tempCodeRunnerFile.py
 results/logs/*.json
 results/logs/*.tmp
 
+# ---------- Models / Checkpoints ----------
+*.pt
+*.pth
+results/checkpoints/
+
+# ---------- Processed Data ----------
+data/processed/
+
+# ---------- Output Runs ----------
+outputs/v1.0_*/

@@ -110,6 +110,8 @@ def ood_signal_shift(X: np.ndarray, shift_frac: float = 0.2,
         rng = np.random.default_rng(42)
     T = X.shape[1]
     max_shift = int(T * shift_frac)
+    if max_shift <= 0:
+        return X.copy()
     shifts = rng.integers(-max_shift, max_shift, size=len(X))
     X_out = np.stack([np.roll(X[i], s, axis=0) for i, s in enumerate(shifts)])
     return X_out

@@ -122,11 +122,16 @@ def evaluate_model_pgd(model, loader, device, epsilon, alpha, steps, criterion, 
     asr = float((orig_correct & adv_wrong).sum() / orig_correct.sum()) if orig_correct.sum() > 0 else 0.0
 
     per_clean, per_adv = {}, {}
+    f1_clean_all = f1_score(all_labels, all_orig_preds, labels=[0, 1, 2, 3, 4], average=None, zero_division=0)
+    f1_adv_all   = f1_score(all_labels, all_preds, labels=[0, 1, 2, 3, 4], average=None, zero_division=0)
+
     for cls in CLINICAL_CLASSES:
         name = CLASS_NAMES[cls]
         mask = all_labels == cls
         per_clean[f"recall_clean_{name}"] = float((all_orig_preds[mask] == cls).sum() / mask.sum()) if mask.sum() > 0 else 0.0
         per_adv[f"recall_adv_{name}"]     = float((all_preds[mask] == cls).sum() / mask.sum())      if mask.sum() > 0 else 0.0
+        per_clean[f"f1_clean_{name}"]     = float(f1_clean_all[cls])
+        per_adv[f"f1_adv_{name}"]         = float(f1_adv_all[cls])
 
     result = {
         "epsilon": epsilon, "alpha": alpha, "steps": steps,

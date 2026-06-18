@@ -36,14 +36,34 @@ def safe_float(v):
         return "-"
 
 CLEAN = {}
-if (TABLES_DIR / "final_results.csv").exists():
-    df_clean = pd.read_csv(TABLES_DIR / "final_results.csv")
-    for _, row in df_clean.iterrows():
-        # Columns: Model,Accuracy,Precision_macro,Recall_macro,F1_macro,F1_weighted,AUC_OvR
-        CLEAN[row["Model"]] = dict(
-            acc=safe_float(row["Accuracy"]), prec=safe_float(row["Precision_macro"]), rec=safe_float(row["Recall_macro"]),
-            f1=safe_float(row["F1_macro"]), f1w=safe_float(row["F1_weighted"]), auc=safe_float(row["AUC_OvR"])
-        )
+baseline_file = Path("results/logs/baseline_results.json")
+if baseline_file.exists():
+    with open(baseline_file, "r") as f:
+        baseline_data = json.load(f)
+    pretty = {
+        "logistic_regression": "Logistic Regression",
+        "decision_tree": "Decision Tree",
+        "lstm": "LSTM",
+        "bilstm": "BiLSTM",
+        "resnet1d": "ResNet1D",
+        "hmr_bilstm": "HMR-BiLSTM",
+    }
+    for k, v in baseline_data.items():
+        if k in pretty:
+            CLEAN[pretty[k]] = dict(
+                acc=safe_float(v.get("accuracy", 0.0)),
+                prec=safe_float(v.get("precision_macro", 0.0)),
+                rec=safe_float(v.get("recall_macro", 0.0)),
+                f1=safe_float(v.get("f1_macro", 0.0)),
+                f1w=safe_float(v.get("f1_weighted", 0.0)),
+                auc=safe_float(v.get("auc_ovr", 0.0)),
+                auc_N=safe_float(v.get("auc_N", float('nan'))),
+                auc_S=safe_float(v.get("auc_S", float('nan'))),
+                auc_V=safe_float(v.get("auc_V", float('nan'))),
+                auc_F=safe_float(v.get("auc_F", float('nan'))),
+            )
+else:
+    print("Warning: results/logs/baseline_results.json not found! CLEAN dictionary will be empty.")
 
 FGSM = {}
 if (TABLES_DIR / "fgsm_baseline_summary.csv").exists():
@@ -150,30 +170,43 @@ def write_csv_and_latex(rows, header, stem, caption, label):
 
 # ── Table 1: Clean Performance ─────────────────────────────────────────────────
 def table_clean():
-    header = ["Model", "Accuracy", "Precision_macro", "Recall_macro", "F1_macro", "F1_weighted", "AUC_OvR"]
+    header = ["Model", "Accuracy", "Precision_macro", "Recall_macro", "F1_macro", "F1_weighted", 
+              "AUC-N", "AUC-S", "AUC-V", "AUC-F", "AUC_OvR"]
     models = list(CLEAN.keys())
     cols = {
-        "acc": [CLEAN[m]["acc"] for m in models],
-        "prec":[CLEAN[m]["prec"] for m in models],
-        "rec": [CLEAN[m]["rec"] for m in models],
-        "f1":  [CLEAN[m]["f1"]  for m in models],
-        "f1w": [CLEAN[m]["f1w"] for m in models],
-        "auc": [CLEAN[m]["auc"] for m in models],
+        "acc":   [CLEAN[m]["acc"] for m in models],
+        "prec":  [CLEAN[m]["prec"] for m in models],
+        "rec":   [CLEAN[m]["rec"] for m in models],
+        "f1":    [CLEAN[m]["f1"]  for m in models],
+        "f1w":   [CLEAN[m]["f1w"] for m in models],
+        "auc_N": [CLEAN[m]["auc_N"] for m in models],
+        "auc_S": [CLEAN[m]["auc_S"] for m in models],
+        "auc_V": [CLEAN[m]["auc_V"] for m in models],
+        "auc_F": [CLEAN[m]["auc_F"] for m in models],
+        "auc":   [CLEAN[m]["auc"] for m in models],
     }
     rows = []
     for i, m in enumerate(models):
-        def cell(key, v): return BOLD(fmt(v)) if i == best_idx(cols[key]) else fmt(v)
+        def cell(key, v):
+            if v == "-" or (isinstance(v, float) and np.isnan(v)):
+                return "-"
+            is_best = i == best_idx(cols[key], lower_is_better=False)
+            return BOLD(fmt(v)) if is_best else fmt(v)
         rows.append([
             m,
-            cell("acc",  CLEAN[m]["acc"]),
-            cell("prec", CLEAN[m]["prec"]),
-            cell("rec",  CLEAN[m]["rec"]),
-            cell("f1",   CLEAN[m]["f1"]),
-            cell("f1w",  CLEAN[m]["f1w"]),
-            cell("auc",  CLEAN[m]["auc"]),
+            cell("acc",   CLEAN[m]["acc"]),
+            cell("prec",  CLEAN[m]["prec"]),
+            cell("rec",   CLEAN[m]["rec"]),
+            cell("f1",    CLEAN[m]["f1"]),
+            cell("f1w",   CLEAN[m]["f1w"]),
+            cell("auc_N", CLEAN[m]["auc_N"]),
+            cell("auc_S", CLEAN[m]["auc_S"]),
+            cell("auc_V", CLEAN[m]["auc_V"]),
+            cell("auc_F", CLEAN[m]["auc_F"]),
+            cell("auc",   CLEAN[m]["auc"]),
         ])
     write_csv_and_latex(rows, header, "final_results",
-        caption="Clean test-set performance on MIT-BIH Arrhythmia dataset.",
+        caption="Clean test-set performance (including per-class OvR AUC) on MIT-BIH Arrhythmia dataset.",
         label="clean_perf")
 
 

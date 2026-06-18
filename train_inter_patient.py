@@ -103,15 +103,29 @@ def evaluate(model, loader, device, num_classes=5):
 
     metrics = {
         "accuracy":        accuracy_score(y_true, preds),
-        "precision_macro": precision_score(y_true, preds, average="macro", zero_division=0),
-        "recall_macro":    recall_score(y_true, preds, average="macro", zero_division=0),
-        "f1_macro":        f1_score(y_true, preds, average="macro", zero_division=0),
-        "f1_weighted":     f1_score(y_true, preds, average="weighted", zero_division=0),
+        "precision_macro": precision_score(y_true, preds, labels=[0, 1, 2, 3], average="macro", zero_division=0),
+        "recall_macro":    recall_score(y_true, preds, labels=[0, 1, 2, 3], average="macro", zero_division=0),
+        "f1_macro":        f1_score(y_true, preds, labels=[0, 1, 2, 3], average="macro", zero_division=0),
+        "f1_weighted":     f1_score(y_true, preds, labels=[0, 1, 2, 3], average="weighted", zero_division=0),
     }
     try:
-        metrics["auc_ovr"] = roc_auc_score(y_true, probs, multi_class="ovr", average="macro")
-    except ValueError:
-        metrics["auc_ovr"] = 0.0
+        # AUC: restrict to AAMI 4-class (labels 0-3) and only classes present in y_true.
+        # roc_auc_score requires at least 2 classes present — val may miss some.
+        present_labels = sorted(set(y_true.tolist()) & {0, 1, 2, 3})
+        if len(present_labels) >= 2:
+            probs_4class = probs[:, present_labels]
+            # Re-normalize so rows sum to 1 for OvR
+            probs_4class = probs_4class / probs_4class.sum(axis=1, keepdims=True)
+            metrics["auc_ovr"] = roc_auc_score(
+                y_true, probs[:, :4],
+                multi_class="ovr",
+                average="macro",
+                labels=present_labels,
+            )
+        else:
+            metrics["auc_ovr"] = float("nan")
+    except ValueError as e:
+        metrics["auc_ovr"] = float("nan")
     return metrics
 
 
@@ -198,7 +212,11 @@ def train_one_epoch(model, loader, optimizer, criterion, device, grad_clip,
 
 # ─── Main ─────────────────────────────────────────────────────────────────────
 def main():
-    cfg = CONFIG
+    cfg = CONFIG.copy()
+    import os
+    env_seed = os.environ.get("ENSEMBLE_SEED")
+    if env_seed is not None:
+        cfg["seed"] = int(env_seed)
     set_seed(cfg["seed"])
 
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
@@ -268,7 +286,8 @@ def main():
     print(f"\n[Training] {cfg['epochs']} epochs, patience={cfg['early_stopping_patience']}")
     best_f1, best_epoch, patience_counter = 0.0, 0, 0
     history = []
-    checkpoint_path = Path(cfg["checkpoint_dir"]) / "inter_best_rlstm.pt"
+    ckpt_name = os.environ.get("ENSEMBLE_CKPT_NAME", "inter_best_rlstm.pt")
+    checkpoint_path = Path(cfg["checkpoint_dir"]) / ckpt_name
 
     for epoch in range(1, cfg["epochs"] + 1):
         current_lr = cosine_lr(epoch - 1, cfg["epochs"],
@@ -343,7 +362,8 @@ def main():
     print("\n[Per-class report]\n" + report)
 
     # ── Save logs ──
-    log_path = Path(cfg["log_dir"]) / "training_history.json"
+    log_name = os.environ.get("ENSEMBLE_LOG_NAME", "training_history.json")
+    log_path = Path(cfg["log_dir"]) / log_name
     with open(log_path, "w") as f:
         json.dump({
             "config":              cfg,

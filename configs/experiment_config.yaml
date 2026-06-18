@@ -12,8 +12,8 @@ model:
 
 uncertainty:
   mc_samples: 50
-  ensemble_size: 5
-  ensemble_seeds: [42, 123, 456, 789, 2025]
+  ensemble_size: 3
+  ensemble_seeds: [42, 123, 456]
   ood_n_samples: 2000
   ood:
     gaussian_noise: true

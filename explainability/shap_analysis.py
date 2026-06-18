@@ -75,8 +75,8 @@ def plot_shap_timeseries(shap_vals, X_samples, true_labels, pred_labels,
     fig.suptitle(title, fontsize=13, fontweight='bold')
     for i in range(n):
         ax  = axes[i, 0]
-        sig = X_samples[i].squeeze()
-        sv  = shap_vals[i].squeeze()
+        sig = X_samples[i].squeeze(-1)   # (T,1) → (T,): explicit channel axis
+        sv  = shap_vals[i].squeeze(-1)   # (T,1) → (T,): explicit, safe for any batch size
         t   = np.arange(len(sig))
         
         # Plot ECG signal
@@ -134,14 +134,29 @@ def plot_shap_summary(mean_importance, T, out_dir):
 
 # Helper to normalize SHAP output shape
 def normalize_shap_output(sv_raw, n_classes):
-    """Normalize SHAP output to a list of length n_classes, each of shape (n_samples, T, 1)."""
+    """Normalize SHAP output to a list of length n_classes, each of shape (n_samples, T, 1).
+
+    GradientExplainer returns ndarray of shape (n_samples, T, channel, n_classes)
+    where classes are always on the LAST axis.
+    Older SHAP versions return a list of (n_samples, T, channel) — one per class.
+    """
     if isinstance(sv_raw, list):
+        # Already a list of per-class arrays
         return sv_raw
     if isinstance(sv_raw, np.ndarray):
-        # SHAP versions differ: can return (n_classes, n, T, 1) or (n, T, 1, n_classes)
-        if sv_raw.shape[0] == n_classes:
+        ndim = sv_raw.ndim
+        if ndim == 4:
+            # Shape: (n_samples, T, channel, n_classes) → class axis is LAST
+            # Do NOT use shape[0] here even if shape[0]==n_classes (that would slice samples)
+            assert sv_raw.shape[-1] == n_classes, (
+                f"Expected last dim = n_classes={n_classes}, got shape {sv_raw.shape}"
+            )
+            return [sv_raw[..., c] for c in range(n_classes)]
+        elif ndim == 3 and sv_raw.shape[0] == n_classes:
+            # Legacy format: (n_classes, n_samples, T) — class axis is FIRST
             return [sv_raw[c] for c in range(n_classes)]
         elif sv_raw.shape[-1] == n_classes:
+            # Fallback: generic last-axis rule
             return [sv_raw[..., c] for c in range(n_classes)]
     return sv_raw
 
@@ -160,7 +175,32 @@ def main():
     n_background = exp_cfg.get("shap_background_samples", 200)
     n_correct    = exp_cfg.get("shap_correct_per_class",   10)
     n_mis        = exp_cfg.get("shap_misclassified_per_class", 5)
+
+    # ── Axis sanity-check: verify normalize_shap_output gives correct class axis ──
+    # Use a synthetic 4D array where class c has a known spike at a UNIQUE, NON-ZERO position.
+    # BUG GUARD: spike at c*10 means class-0 spike is at t=0. argmax([0,0,...,0]) also returns 0
+    # on wrong-axis arrays (all-zero), so class-0 would tình cờ pass even with wrong axis.
+    # Fix: use (c+1)*10 — all spikes land at t≥10, argmax-on-zeros returns 0 ≠ any spike → fail.
+    print("[AXIS CHECK] Verifying normalize_shap_output with synthetic 4D array...")
+    n_cls_check = 5
+    sv_synth = np.zeros((3, 187, 1, n_cls_check), dtype=np.float32)  # (samples, T, ch, classes)
+    for c in range(n_cls_check):
+        sv_synth[:, (c + 1) * 10, 0, c] = 1.0  # spike at t=(c+1)*10, non-zero, unique per class
+    sv_norm = normalize_shap_output(sv_synth, n_cls_check)
+    assert len(sv_norm) == n_cls_check, f"[AXIS CHECK FAIL] Expected list len={n_cls_check}, got {len(sv_norm)}"
+    for c in range(n_cls_check):
+        arr = sv_norm[c]              # should be (3, 187, 1)
+        assert arr.shape == (3, 187, 1), f"[AXIS CHECK FAIL] Class {c} shape {arr.shape} != (3,187,1)"
+        peak_t = int(np.abs(arr).squeeze(-1).mean(axis=0).argmax())
+        expected_t = (c + 1) * 10
+        assert 0 <= peak_t < 187, f"[AXIS CHECK FAIL] Class {c}: peak_t={peak_t} out of bounds (T=187)"
+        assert peak_t == expected_t, (
+            f"[AXIS CHECK FAIL] Class {c}: expected peak at t={expected_t}, got t={peak_t}. "
+            f"WRONG AXIS — stop and debug normalize_shap_output."
+        )
+    print("[AXIS CHECK] PASSED — class axis confirmed correct for 4D ndarray (t=0 blind spot excluded).")
     shap_classes = exp_cfg.get("shap_classes", [0, 1, 2, 3])
+
 
     # CPU budget: cap background and summary to keep runtime < 10 min
     n_background = min(n_background, 100)   # GradientExplainer is heavier per-sample
@@ -207,6 +247,47 @@ def main():
             all_preds.append(wrapper(b).argmax(dim=-1).cpu().numpy())
     preds_all = np.concatenate(all_preds)
     print(f"  Accuracy: {(preds_all == y_test).mean():.4f}")
+
+    # ── Clinical smoke test: verify SHAP attribution is clinically plausible ──
+    # Synthetic axis-check confirms AXIS. This confirms MEANING using real V beats.
+    # Beat format: 187 samples, R-peak at t≈90 (90 samples before, 97 after).
+    # QRS complex: t≈80-100 | T wave: t≈100-145 → clinical "hot zone": t in [60, 150]
+    # NOTE: t=[60,150] is a heuristic, not ground truth — R-peak centering can vary.
+    # Running on N_SMOKE beats and reporting the FRACTION in zone is more robust than 1 beat.
+    V_CLASS = 2
+    N_SMOKE = 10           # number of V beats to sample
+    QRS_T_ZONE = (60, 150) # inclusive, conservative window for QRS+T
+    v_correct_idx = np.where((y_test == V_CLASS) & (preds_all == V_CLASS))[0]
+    if len(v_correct_idx) >= 2:
+        n_smoke = min(N_SMOKE, len(v_correct_idx))
+        smoke_idx = v_correct_idx[np.linspace(0, len(v_correct_idx) - 1, n_smoke, dtype=int)]
+        X_smoke_np = X_test[smoke_idx]                                   # (n_smoke, 187, 1)
+        X_smoke_t  = torch.from_numpy(X_smoke_np).to(device)
+        bg_smoke   = torch.from_numpy(
+            X_train[np.random.default_rng(42).choice(len(X_train), 20, replace=False)]
+        ).to(device)
+        print(f"[CLINICAL SMOKE TEST] Running SHAP on {n_smoke} real V beats (class 2)...")
+        explainer_smoke = shap.GradientExplainer(wrapper, bg_smoke)
+        sv_smoke_raw    = explainer_smoke.shap_values(X_smoke_t)
+        sv_smoke        = normalize_shap_output(sv_smoke_raw, 5)     # list of 5 arrays
+        sv_v = np.abs(sv_smoke[V_CLASS]).squeeze(-1)                 # (n_smoke, 187)
+        peak_ts = sv_v.argmax(axis=1)                                # (n_smoke,) — per-beat peak
+        for t in peak_ts:
+            assert 0 <= t < 187, f"[CLINICAL SMOKE TEST FAIL] peak_t={t} is out of bounds (signal length T=187)"
+        in_zone = [(QRS_T_ZONE[0] <= int(t) <= QRS_T_ZONE[1]) for t in peak_ts]
+        frac = sum(in_zone) / n_smoke
+        marker = "✓" if frac >= 0.6 else "⚠ WARNING"
+        print(f"[CLINICAL SMOKE TEST] V-beat peaks in QRS/T zone [{QRS_T_ZONE[0]},{QRS_T_ZONE[1]}]: "
+              f"{sum(in_zone)}/{n_smoke} = {frac:.0%}  {marker}")
+        print(f"  Per-beat peak timesteps: {[int(t) for t in peak_ts]}")
+        if frac < 0.6:
+            print(f"  Less than 60% of V beats peak inside QRS/T zone. Attribution may be diffuse")
+            print(f"  or R-peak centering deviates from expectation. Check shap_class_V.png.")
+            print(f"  This is a WARNING (not fatal) — a scientific observation, not a bug.")
+    else:
+        print("[CLINICAL SMOKE TEST] Fewer than 2 correctly classified V beats — skipping smoke test.")
+
+
 
     # ── Shared per-class samples for reproducible Jaccard(SHAP, IG) ──
     # Both SHAP and IG must use the SAME up-to-30 correctly-classified beats per class.
@@ -288,6 +369,8 @@ def main():
     # Top-K CSV
     top_k   = 20
     top_idx = np.argsort(mean_imp)[::-1][:top_k]
+    for idx in top_idx:
+        assert 0 <= idx < 187, f"[INDEX CHECK FAIL] Global rank index {idx} out of bounds (T=187)"
     with open(paths["out_explain"] / "shap_importance_ranking.csv", "w",
               newline="", encoding="utf-8") as f:
         w = csv.writer(f)
@@ -332,6 +415,8 @@ def main():
 
         cls_imp = np.abs(shap_vals_summary[cls]).squeeze(-1).mean(axis=0)
         top10    = np.argsort(cls_imp)[::-1][:10].tolist()
+        for idx in top10:
+            assert 0 <= idx < 187, f"[INDEX CHECK FAIL] {cn} top10 index {idx} out of bounds (T=187)"
         top_per_class[cn] = {
             "top10_timesteps": top10,
             "mean_importance": float(cls_imp.mean()),
@@ -353,6 +438,8 @@ def main():
         sv_c  = shap_vals_shared[cls][pos_c]          # (n, T, 1)
         cls_imp_shared = np.abs(sv_c).squeeze(-1).mean(axis=0)  # (T,)
         shap_shared_top10[cn] = np.argsort(cls_imp_shared)[::-1][:10].tolist()
+        for idx in shap_shared_top10[cn]:
+            assert 0 <= idx < 187, f"[INDEX CHECK FAIL] {cn} shared top10 index {idx} out of bounds (T=187)"
         print(f"  [Shared SHAP] {cn}: top-3 timesteps = {shap_shared_top10[cn][:3]}")
 
     # results.json

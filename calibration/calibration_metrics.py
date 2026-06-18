@@ -112,8 +112,6 @@ def compute_classwise_ece(probs: np.ndarray, labels: np.ndarray, num_bins: int =
     for c in range(num_classes):
         binary_conf = probs[:, c]          # P(c | x)
         binary_labels = (labels == c).astype(int)
-        binary_preds = (binary_conf >= 0.5).astype(int)
-        accuracies = (binary_preds == binary_labels)
 
         ece_c = 0.0
         for bin_lower, bin_upper in zip(bin_lowers, bin_uppers):
@@ -123,7 +121,7 @@ def compute_classwise_ece(probs: np.ndarray, labels: np.ndarray, num_bins: int =
 
             prop_in_bin = in_bin.mean()
             if prop_in_bin > 0:
-                accuracy_in_bin = accuracies[in_bin].mean()
+                accuracy_in_bin = binary_labels[in_bin].mean()
                 avg_confidence_in_bin = binary_conf[in_bin].mean()
                 ece_c += np.abs(avg_confidence_in_bin - accuracy_in_bin) * prop_in_bin
 
