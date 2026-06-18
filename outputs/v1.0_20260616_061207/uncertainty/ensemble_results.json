@@ -1,0 +1,63 @@
+{
+  "experiment_version": "v1.0",
+  "run_id": "v1.0_20260616_061207",
+  "checkpoint_hashes": [
+    "3d5434314e7132f07913462a7bd7ab6095b2e3a3",
+    "edfa47bd4db467bbeccc4ef53b1fa7cb415867a1",
+    "09b40f31c28b0440176eb4aaafc1e59663f6eeaa"
+  ],
+  "module": "uncertainty_deep_ensemble",
+  "timestamp": "2026-06-16T18:40:37.794151",
+  "config": {
+    "n_members": 3,
+    "ensemble_mode": "full",
+    "ood_n_samples": 2000,
+    "ood_strategy": "synthetic: gaussian_noise + baseline_wander + random_crop + signal_shift (same as T4)",
+    "pending_full_ensemble": false
+  },
+  "metrics": {
+    "id_accuracy": 0.9331,
+    "id_f1_macro": 0.4937,
+    "id_f1_per_class": {
+      "N": 0.9651,
+      "S": 0.2725,
+      "V": 0.9045,
+      "F": 0.3265,
+      "Q": 0.0
+    },
+    "id_mean_entropy": 0.4803,
+    "id_mean_mi": 0.0428,
+    "id_mean_conf": 0.8388,
+    "ood_mean_entropy": 0.6016,
+    "ood_mean_mi": 0.0724,
+    "ood_mean_conf": 0.7824,
+    "ood_detection_auroc": 0.6228,
+    "per_class_entropy_id": {
+      "N": {
+        "mean_entropy": 0.47817352414131165,
+        "mean_conf": 0.8428805470466614,
+        "n_samples": 44217
+      },
+      "S": {
+        "mean_entropy": 0.6486666798591614,
+        "mean_conf": 0.7152833938598633,
+        "n_samples": 1837
+      },
+      "V": {
+        "mean_entropy": 0.34942910075187683,
+        "mean_conf": 0.8860235810279846,
+        "n_samples": 3219
+      },
+      "F": {
+        "mean_entropy": 1.007927656173706,
+        "mean_conf": 0.5639623999595642,
+        "n_samples": 388
+      },
+      "Q": {
+        "mean_entropy": 0.6451225876808167,
+        "mean_conf": 0.7196868062019348,
+        "n_samples": 7
+      }
+    }
+  }
+}
