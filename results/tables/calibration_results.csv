@@ -1,4 +1,0 @@
-Rank,Model,ECE (lower=better),Brier Score (lower=better),ECE Interpretation,Brier Interpretation
-1,BiLSTM,0.1672,0.5597,Poor (>=0.10),Poor (>=0.20)
-2,HMR-BiLSTM,0.2309,0.6054,Poor (>=0.10),Poor (>=0.20)
-3,LSTM,0.3146,0.7622,Poor (>=0.10),Poor (>=0.20)

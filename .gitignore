@@ -51,18 +51,15 @@ tempCodeRunnerFile.py
 *.ipynb_checkpoints
 .ipynb_checkpoints/
 
-# ---------- Results (logs only, keep tables & figures) ----------
-# results/ is tracked, but individual logs may be regenerated
-results/logs/*.json
-results/logs/*.tmp
+# ---------- Results ----------
+results/
 
 # ---------- Models / Checkpoints ----------
 *.pt
 *.pth
-results/checkpoints/
 
 # ---------- Processed Data ----------
 data/processed/
 
 # ---------- Output Runs ----------
-outputs/v1.0_*/
+outputs/

@@ -117,8 +117,8 @@ def evaluate_model_pgd(model, loader, device, epsilon, alpha, steps, criterion, 
     orig_conf      = np.concatenate(orig_conf_list)
     adv_conf       = np.concatenate(adv_conf_list)
 
-    macro_f1     = f1_score(all_labels, all_preds, average="macro", zero_division=0)
-    macro_recall = recall_score(all_labels, all_preds, average="macro", zero_division=0)
+    macro_f1     = f1_score(all_labels, all_preds, labels=[0, 1, 2, 3], average="macro", zero_division=0)
+    macro_recall = recall_score(all_labels, all_preds, labels=[0, 1, 2, 3], average="macro", zero_division=0)
     asr = float((orig_correct & adv_wrong).sum() / orig_correct.sum()) if orig_correct.sum() > 0 else 0.0
 
     per_clean, per_adv = {}, {}

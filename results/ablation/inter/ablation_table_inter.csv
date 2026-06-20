@@ -1,2 +1,0 @@
-Variant,Params,Acc,F1-macro,F1-N,F1-S,F1-V,F1-F,Rec-N,Rec-S,Rec-V,Rec-F,AUC
-No-Adv-Training,505,038,0.9197,0.5227,0.9591,0.2625,0.8511,0.0179,0.9561,0.2036,0.9366,0.0284,0.8997

@@ -165,7 +165,7 @@ def main():
 
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
     print(f"Device: {device} | Run ID: {run_id}")
-    print(f"AutoAttack ε={aa_eps} norm={aa_norm}")
+    print(f"AutoAttack eps={aa_eps} norm={aa_norm}")
 
     # ── Load model ──
     print("Loading model...")
@@ -194,11 +194,11 @@ def main():
     correct_mask = preds_clean == y_test
     X_correct    = X_test[correct_mask]
     y_correct    = y_test[correct_mask]
-    X_sub, y_sub, _ = select_stratified_subset(X_correct, y_correct, n_eval, rng)
+    X_sub, y_sub, sub_idx = select_stratified_subset(X_correct, y_correct, n_eval, rng)
     print(f"  Subset: {len(X_sub)} correctly classified samples (stratified)")
 
-    clean_acc = accuracy_score(y_sub, preds_clean[correct_mask][:len(y_sub)])
-    clean_f1  = f1_score(y_sub, preds_clean[correct_mask][:len(y_sub)],
+    clean_acc = accuracy_score(y_sub, preds_clean[correct_mask][sub_idx])
+    clean_f1  = f1_score(y_sub, preds_clean[correct_mask][sub_idx],
                           average="macro", zero_division=0)
 
     # ── PGD-20 baseline (for comparison) ──
@@ -224,14 +224,14 @@ def main():
     print(f"  PGD-20 ASR: {pgd_asr:.4f}  Macro F1: {pgd_f1:.4f}")
 
     # ── AutoAttack ──
-    print(f"Running AutoAttack ({aa_norm}, ε={aa_eps})...")
+    print(f"Running AutoAttack ({aa_norm}, eps={aa_eps})...")
     # AutoAttack expects input in [0,1], output logits
     X_sub_unit  = to_unit_range(X_sub, data_min, data_max)
     x_aa_tensor = torch.from_numpy(X_sub_unit).to(device)      # (N, T, 1)
     y_aa_tensor = torch.from_numpy(y_sub).long().to(device)
 
-    # Transpose to (N, 1, T) — AutoAttack expects (N, C, H) or (N, C, L)
-    x_aa_tensor = x_aa_tensor.permute(0, 2, 1)   # (N, 1, T)
+    # Shape to (N, 1, T, 1) — AutoAttack expects 4D inputs (N, C, H, W)
+    x_aa_tensor = x_aa_tensor.permute(0, 2, 1).unsqueeze(-1)   # (N, 1, T, 1)
 
     # Wrapper: receives (N, 1, T), permutes back, runs model
     class AAWrapper(nn.Module):
@@ -241,8 +241,19 @@ def main():
             self.d_min = d_min
             self.d_max = d_max
         def forward(self, x):
-            # x: (N, 1, T) in [0,1] → (N, T, 1) in Z-score range
-            x = x.permute(0, 2, 1)
+            # Handle possible 4D inputs from AutoAttack (e.g., shape N, C, H, W where C=1, H=1 or W=1)
+            if x.dim() == 4:
+                if x.shape[1] == 1:
+                    x = x.squeeze(1)
+                if x.shape[-1] == 1:
+                    x = x.squeeze(-1)
+            
+            # Map back to (N, T, 1)
+            if x.dim() == 2:
+                x = x.unsqueeze(-1)
+            elif x.dim() == 3 and x.shape[1] == 1:
+                x = x.permute(0, 2, 1)
+                
             x_real = x * (self.d_max - self.d_min) + self.d_min
             return self.m(x_real)
 
@@ -252,9 +263,13 @@ def main():
     try:
         from autoattack import AutoAttack
         adversary = AutoAttack(
-            aa_wrapper, norm=aa_norm, eps=aa_eps,
+            aa_wrapper, norm=aa_norm, eps=aa_eps / (data_max - data_min),
             version="standard", device=device, verbose=True
         )
+        # Limit target classes to avoid IndexError on 5-class dataset
+        adversary.apgd_targeted.n_target_classes = 4
+        adversary.fab.n_target_classes = 4
+
         # AutoAttack returns perturbed x_adv in [0,1], (N, 1, T)
         x_adv_aa = adversary.run_standard_evaluation(
             x_aa_tensor, y_aa_tensor, bs=32
@@ -304,9 +319,9 @@ def main():
     gradient_masking_suspected = masking_gap > 0.15
     print(f"\n  Masking gap (AA - PGD): {masking_gap:.4f}")
     if gradient_masking_suspected:
-        print("  ⚠ Gradient masking SUSPECTED (gap > 0.15)")
+        print("  [!] Gradient masking SUSPECTED (gap > 0.15)")
     else:
-        print("  ✓ No strong gradient masking evidence")
+        print("  [OK] No strong gradient masking evidence")
 
     # ── Load C&W results for comparison (if available) ──
     cw_results_path = paths["out_robust"] / "cw_attack_results.json"
@@ -359,7 +374,7 @@ def main():
                 "Use this to honestly characterize robustness in paper."
             ),
             "paper_claim": (
-                f"Under AutoAttack (ε={aa_eps}, {aa_norm}), ASR={aa_asr:.4f}. "
+                f"Under AutoAttack (eps={aa_eps}, {aa_norm}), ASR={aa_asr:.4f}. "
                 f"PGD-20 ASR={pgd_asr:.4f}. "
                 + ("Gradient masking suspected (Δ={:.4f}).".format(masking_gap)
                    if gradient_masking_suspected else
@@ -376,7 +391,7 @@ def main():
     print("\n[T7 AutoAttack] Complete.")
     print(f"  PGD-20 ASR: {pgd_asr:.4f}  →  AutoAttack ASR: {aa_asr:.4f}")
     print(f"  Masking gap: {masking_gap:+.4f}  "
-          + ("⚠ MASKING" if gradient_masking_suspected else "✓ clean"))
+          + ("[!] MASKING" if gradient_masking_suspected else "[OK] clean"))
 
 
 if __name__ == "__main__":

@@ -1,1 +1,0 @@
-rank,test_idx,test_true,test_pred,train_idx,train_label,cosine_influence,model_self_pred,model_self_conf,agrees_noise,disagreement_str

@@ -98,8 +98,8 @@ def evaluate_fgsm(model, dataloader, device, criterion, epsilon=0.02):
     adv_confidence = np.concatenate(adv_confidence)
 
     acc = accuracy_score(all_labels, all_preds)
-    macro_f1 = f1_score(all_labels, all_preds, average="macro", zero_division=0)
-    macro_recall = recall_score(all_labels, all_preds, average="macro", zero_division=0)
+    macro_f1 = f1_score(all_labels, all_preds, labels=[0, 1, 2, 3], average="macro", zero_division=0)
+    macro_recall = recall_score(all_labels, all_preds, labels=[0, 1, 2, 3], average="macro", zero_division=0)
 
     if orig_correct.sum() > 0:
         attack_success = (orig_correct & adv_wrong).sum() / orig_correct.sum()
@@ -516,7 +516,7 @@ def main():
         models = {
             "LSTM": "results/checkpoints/best_lstm.pt",
             "BiLSTM": "results/checkpoints/best_bilstm.pt",
-            "HMR-BiLSTM": "results/checkpoints/best_rlstm.pt",
+            "HMR-BiLSTM": "results/checkpoints/inter_best_rlstm.pt",
         }
         compare_models(models, args.epsilons, device, test_loader, Path(args.output_dir))
         return

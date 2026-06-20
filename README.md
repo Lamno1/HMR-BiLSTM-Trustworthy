@@ -71,6 +71,10 @@ HMR-BiLSTM/
 ## Installation
 
 ```bash
+# Clone the repository
+git clone https://github.com/Lamno1/HMR-BiLSTM-Trustworthy.git
+cd HMR-BiLSTM-Trustworthy
+
 # Create and activate virtual environment (recommended)
 python -m venv venv
 venv\Scripts\activate        # Windows
@@ -87,32 +91,42 @@ pip install torch torchvision torchaudio --index-url https://download.pytorch.or
 
 ## Usage
 
-### 1. Data Preprocessing
+### Option A: Run the Complete Reproducible Pipeline (Recommended)
 
+You can reproduce the entire pipeline (from preprocessing, baseline training, ablation study to exporting all final tables and figures) in a single command using the master script:
+
+```bash
+python run_reproducible_pipeline.py
+```
+
+To view the commands that will be executed without actually running them:
+```bash
+python run_reproducible_pipeline.py --dry-run
+```
+
+### Option B: Run Steps Manually
+
+If you prefer to run the components individually:
+
+#### 1. Data Preprocessing
 ```bash
 python preprocess.py
 ```
-
 Splits the raw MIT‑BIH dataset into train/val/test sets and computes class weights. Outputs saved to `data/processed/`.
 
-### 2. Train HMR‑BiLSTM (Proposed Model)
-
+#### 2. Train HMR‑BiLSTM (Proposed Model)
 ```bash
 python train.py
 ```
-
 Trains the main HMR‑BiLSTM model with adversarial training (FGSM), focal loss, cosine annealing LR, and early stopping. Best checkpoint saved to `results/checkpoints/best_rlstm.pt`.
 
-### 3. Train Baseline Models
-
+#### 3. Train Baseline Models
 ```bash
 python run_baselines.py
 ```
-
 Trains LSTM and BiLSTM baseline models. Checkpoints saved to `results/checkpoints/`.
 
-### 4. Ablation Study
-
+#### 4. Ablation Study
 ```bash
 # Run all ablation variants
 python run_ablation.py
@@ -123,11 +137,9 @@ python run_ablation.py --variants no_rmc no_cnn
 # Generate table from existing checkpoints only
 python run_ablation.py --table-only
 ```
-
 Variants: `full`, `no_rmc`, `no_cnn`, `mean_pool`, `no_adv`, `no_hybrid`, `no_smooth`.
 
-### 5. Evaluation & Visualization
-
+#### 5. Evaluation & Visualization
 ```bash
 # Core figures: confusion matrix, ROC curve, gate trajectories
 python report_results.py
@@ -152,6 +164,25 @@ python plot_and_export.py
 ```
 
 > **Note (Windows/CUDA):** PGD evaluation requires `torch.backends.cudnn.enabled = False` to avoid CuDNN backward errors in eval mode. This is handled automatically inside `evaluate_pgd.py`.
+
+---
+
+## Reproducibility & Consistency
+
+### Strict Seed Control
+All scripts use a fixed seed (`42`) for random number generators (`numpy.random`, `torch.manual_seed`, etc.) and data shufflers to ensure that all partitions, weight initializations, and sample selections are identical across runs.
+
+### Deterministic CUDA execution
+During training and evaluation, PyTorch's deterministic execution flags are explicitly enabled:
+```python
+torch.backends.cudnn.deterministic = True
+torch.backends.cudnn.benchmark = False
+```
+
+### Expectation of Results
+If you or anyone else clones the repository and runs the pipeline from scratch on the same hardware architecture (e.g., CPU or CUDA GPU) and library versions, the outputs will **exactly match** the published metrics (including the gold 4-class macro F1 score of **0.5644** for HMR-BiLSTM). 
+
+*Note: Minor round-off variations (e.g., in the range of $10^{-6}$) might occasionally occur due to floating-point differences across different GPU architectures or PyTorch versions.*
 
 ---
 
