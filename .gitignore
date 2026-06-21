@@ -52,7 +52,11 @@ tempCodeRunnerFile.py
 .ipynb_checkpoints/
 
 # ---------- Results ----------
-results/
+# Allow pushing tables and figures, but ignore heavy checkpoints and raw runs
+results/checkpoints/
+# results/logs/
+# results/robustness/
+# results/ablation/
 
 # ---------- Models / Checkpoints ----------
 *.pt
