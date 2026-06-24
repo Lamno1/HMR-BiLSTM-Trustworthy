@@ -60,8 +60,8 @@ def pgd_attack(model, x, y, epsilon, alpha, steps, criterion, data_min=None, dat
     
     for _ in range(steps):
         x_adv.requires_grad_(True)
-        outputs = model(x_adv)
-        loss, _ = criterion(outputs, y, r_fwd=None, r_bwd=None)
+        logits, internals = model(x_adv, return_internals=True)
+        loss, _ = criterion(logits, y, r_fwd=internals["r_fwd"], r_bwd=internals["r_bwd"])
         model.zero_grad()
         loss.backward()
         
@@ -192,15 +192,15 @@ def run_study():
         
     # Generate convergence plot
     print("Generating convergence plot...")
-    steps = [r["steps"] for r in results["convergence"]]
+    plot_steps = [r["steps"] for r in results["convergence"]]
     accs = [r["accuracy"] for r in results["convergence"]]
     f1s = [r["f1_macro"] for r in results["convergence"]]
     asrs = [r["attack_success_rate"] for r in results["convergence"]]
     
     plt.figure(figsize=(10, 6))
-    plt.plot(steps, accs, marker='o', color='blue', label='Accuracy', linewidth=2)
-    plt.plot(steps, f1s, marker='s', color='green', label='Macro F1-score', linewidth=2)
-    plt.plot(steps, asrs, marker='^', color='red', label='Attack Success Rate (ASR)', linewidth=2)
+    plt.plot(plot_steps, accs, marker='o', color='blue', label='Accuracy', linewidth=2)
+    plt.plot(plot_steps, f1s, marker='s', color='green', label='Macro F1-score', linewidth=2)
+    plt.plot(plot_steps, asrs, marker='^', color='red', label='Attack Success Rate (ASR)', linewidth=2)
     
     plt.axhline(y=clean_acc, color='blue', linestyle='--', alpha=0.5, label='Clean Accuracy')
     plt.axhline(y=clean_f1, color='green', linestyle='--', alpha=0.5, label='Clean Macro F1')

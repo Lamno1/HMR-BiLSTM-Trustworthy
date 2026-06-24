@@ -103,10 +103,10 @@ def evaluate(model, loader, device, num_classes=5):
 
     metrics = {
         "accuracy":        accuracy_score(y_true, preds),
-        "precision_macro": precision_score(y_true, preds, average="macro", zero_division=0),
-        "recall_macro":    recall_score(y_true, preds, average="macro", zero_division=0),
-        "f1_macro":        f1_score(y_true, preds, average="macro", zero_division=0),
-        "f1_weighted":     f1_score(y_true, preds, average="weighted", zero_division=0),
+        "precision_macro": precision_score(y_true, preds, labels=[0, 1, 2, 3], average="macro", zero_division=0),
+        "recall_macro":    recall_score(y_true, preds, labels=[0, 1, 2, 3], average="macro", zero_division=0),
+        "f1_macro":        f1_score(y_true, preds, labels=[0, 1, 2, 3], average="macro", zero_division=0),
+        "f1_weighted":     f1_score(y_true, preds, labels=[0, 1, 2, 3], average="weighted", zero_division=0),
     }
     try:
         metrics["auc_ovr"] = roc_auc_score(y_true, probs, multi_class="ovr", average="macro")
@@ -127,18 +127,20 @@ def fgsm_attack_train(model, x, y, epsilon, criterion):
     """
     x_adv = x.clone().detach().requires_grad_(True)
 
-    # Forward pass để lấy gradient — model vẫn ở train mode
-    # torch.enable_grad() đảm bảo gradient tính được ngay cả khi
-    # hàm này được gọi từ trong torch.no_grad() context
+    # Freeze BN running stats during FGSM generation so they are not updated
+    # for the adversarial sub-batch — only the main forward pass should track them.
+    import torch.nn as _nn
+    _bn_layers = [m for m in model.modules() if isinstance(m, _nn.BatchNorm1d)]
+    for bn in _bn_layers:
+        bn.eval()
+
     with torch.enable_grad():
         logits = model(x_adv)
-        # r_fwd=None: only task loss, no smoothness penalty
         loss, _ = criterion(logits, y, r_fwd=None, r_bwd=None)
-        
-        # Clear model gradients before backward pass for perturbation
-        # để gradient không tích lũy vào model parameters
-        model.zero_grad()
         loss.backward()
+
+    for bn in _bn_layers:
+        bn.train()
 
     perturbation = epsilon * x_adv.grad.sign()
 
@@ -149,6 +151,7 @@ def train_one_epoch(model, loader, optimizer, criterion, device, grad_clip,
                     adv_training=False, adv_epsilon=0.02, adv_ratio=0.3):
     model.train()
     total_loss, total_task, total_smooth, n_samples = 0.0, 0.0, 0.0, 0
+    n_nan_batches = 0
 
     for X, y in loader:
         X, y = X.to(device), y.to(device)
@@ -177,6 +180,7 @@ def train_one_epoch(model, loader, optimizer, criterion, device, grad_clip,
         )
 
         if torch.isnan(loss) or torch.isinf(loss):
+            n_nan_batches += 1
             continue
 
         loss.backward()
@@ -189,10 +193,13 @@ def train_one_epoch(model, loader, optimizer, criterion, device, grad_clip,
         total_smooth += comp["smooth"].item() * bs
         n_samples    += bs
 
+    if n_nan_batches > 0:
+        print(f"  [WARNING] {n_nan_batches} batch(es) skipped due to NaN/Inf loss.")
     return {
-        "loss":   total_loss  / max(1, n_samples),
-        "task":   total_task  / max(1, n_samples),
-        "smooth": total_smooth / max(1, n_samples),
+        "loss":         total_loss   / max(1, n_samples),
+        "task":         total_task   / max(1, n_samples),
+        "smooth":       total_smooth / max(1, n_samples),
+        "nan_batches":  n_nan_batches,
     }
 
 
@@ -266,12 +273,12 @@ def main():
 
     # ── Training loop ──
     print(f"\n[Training] {cfg['epochs']} epochs, patience={cfg['early_stopping_patience']}")
-    best_f1, best_epoch, patience_counter = 0.0, 0, 0
+    best_f1, best_epoch, patience_counter = float("-inf"), 0, 0
     history = []
     checkpoint_path = Path(cfg["checkpoint_dir"]) / "best_rlstm.pt"
 
     for epoch in range(1, cfg["epochs"] + 1):
-        current_lr = cosine_lr(epoch - 1, cfg["epochs"],
+        current_lr = cosine_lr(epoch - 1, max(1, cfg["epochs"] - 1),
                                cfg["learning_rate"], cfg["min_lr"])
         for pg in optimizer.param_groups:
             pg["lr"] = current_lr

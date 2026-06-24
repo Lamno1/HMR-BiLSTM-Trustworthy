@@ -182,7 +182,8 @@ def evaluate(model, loader, device, num_classes=5):
     }
     try:
         metrics["auc_ovr"] = float(
-            roc_auc_score(y_true, probs, multi_class="ovr", average="macro")
+            roc_auc_score(y_true, probs[:, :4], multi_class="ovr", average="macro",
+                          labels=[0, 1, 2, 3])
         )
     except ValueError:
         metrics["auc_ovr"] = 0.0
@@ -356,6 +357,9 @@ def train_variant(variant_name, variant_flags, cfg, device,
 
     # Load best và evaluate test
     print(f"\n  [Loading best checkpoint — epoch {best_epoch}]")
+    if not ckpt_path.exists():
+        print(f"  [WARNING] Checkpoint not found: {ckpt_path} — skipping test eval.")
+        return None
     ckpt = torch.load(ckpt_path, weights_only=False)
     model.load_state_dict(ckpt["model_state"], strict=True)
     test_m = evaluate(model, test_loader, device, cfg["num_classes"])
@@ -537,13 +541,12 @@ def main():
             print(f"[ERROR] {json_path} not found or empty. Run without --table-only first.")
             return
     else:
-        set_seed(cfg["seed"])
-
         for variant_name in args.variants:
             if variant_name not in VARIANTS:
                 print(f"[SKIP] Unknown variant: {variant_name}")
                 continue
 
+            set_seed(cfg["seed"])
             variant_flags = VARIANTS[variant_name]
             result = train_variant(
                 variant_name=variant_name,

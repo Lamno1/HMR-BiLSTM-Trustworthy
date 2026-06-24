@@ -343,10 +343,12 @@ add_table(
         ["python report_results.py",             "Confusion matrix, ROC curve, gate trajectories"],
         ["python compare_fgsm_baselines.py",      "FGSM adversarial robustness (all models)"],
         ["python evaluate_pgd.py",                "PGD adversarial robustness"],
+        ["python evaluate_autoattack.py",         "AutoAttack robustness evaluation (T7)"],
         ["python evaluate_robustness_all.py",      "Gaussian-noise robustness"],
         ["python evaluate_calibration.py",         "Reliability diagram, ECE, Brier score"],
         ["python evaluate_ablation_robustness.py", "Robustness of each ablation variant"],
         ["python plot_and_export.py",              "Export final figures and LaTeX/CSV tables"],
+        ["python evaluate_trustworthiness.py",     "Generate T8 Trustworthy Scorecard"],
     ],
     col_widths=[7, 8.5],
 )
@@ -362,6 +364,17 @@ code("python plot_and_export.py")
 para("Output files:", size=11)
 bullet("Figures: results/figures/ (PDF and PNG)")
 bullet("Tables:  results/tables/ (LaTeX .tex and .csv)")
+spacer()
+
+h2("Step 10: Run the Entire Pipeline Automatically (Alternative)")
+para(
+    "Instead of running each step manually, you can execute the entire experimental "
+    "pipeline from start to finish using the orchestration scripts:"
+)
+para("Windows:", bold=True, size=10)
+code("run_all.bat")
+para("Cross-platform (Python):", bold=True, size=10)
+code("python run_reproducible_pipeline.py")
 spacer()
 
 # ══════════════════════════════════════════════════════════════════════════════
@@ -392,7 +405,7 @@ add_table(
         ["OutOfMemoryError during training", "Reduce batch size in train.py, or switch to CPU"],
         ["cuDNN backward error (PGD)",       "torch.backends.cudnn.enabled=False is already set in evaluate_pgd.py"],
         ["File not found: mitbih_train.csv", "Ensure CSV files are placed in data/raw/ with exact filenames"],
-        ["Low F1 on minority classes",       "Verify class_weights.json exists in data/processed/; re-run preprocess.py"],
+        ["Low F1 on minority classes",       "Verify class_weights.npy exists in data/processed/; re-run preprocess.py"],
         ["Training too slow",                "Use a GPU; or reduce epochs / batch size for quick testing"],
     ],
     col_widths=[6, 9.5],

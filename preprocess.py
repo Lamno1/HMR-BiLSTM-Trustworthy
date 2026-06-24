@@ -148,11 +148,11 @@ def main():
     print("\n[4/8] Normalizing ECG signals using TRAIN-ONLY statistics...")
 
     # Calculate mean and std on X_train ONLY to prevent validation/test leakage
-    mean = X_train.mean()
-    std = X_train.std() + 1e-8
+    mean = X_train.mean(axis=0)
+    std = np.sqrt(X_train.var(axis=0) + 1e-8)
 
-    print(f"  Train Mean BEFORE normalization: {mean:.6f}")
-    print(f"  Train Std  BEFORE normalization: {std:.6f}")
+    print(f"  Train Mean BEFORE normalization: per-feature array, shape={mean.shape}, overall_mean={mean.mean():.6f}")
+    print(f"  Train Std  BEFORE normalization: per-feature array, shape={std.shape},  overall_mean={std.mean():.6f}")
 
     # Normalize train, val, and test using train statistics
     X_train = (X_train - mean) / std
@@ -162,12 +162,12 @@ def main():
     # Save normalization statistics
     np.save(
         out_dir / "norm_mean.npy",
-        np.array([mean], dtype=np.float32),
+        mean.astype(np.float32),
     )
 
     np.save(
         out_dir / "norm_std.npy",
-        np.array([std], dtype=np.float32),
+        std.astype(np.float32),
     )
 
     print(f"  Train: {X_train.shape}")
@@ -213,9 +213,9 @@ def main():
     # IMPORTANT:
     # Too aggressive clipping may hurt minority classes.
 
-    class_weights = np.clip(class_weights, 0.5, 10.0)
+    class_weights = np.clip(class_weights, 0.5, 50.0)
 
-    print("\n  Class weights AFTER clipping to [0.5, 10.0]:")
+    print("\n  Class weights AFTER clipping to [0.5, 50.0]:")
 
     for cls, w in enumerate(class_weights):
         print(

@@ -252,19 +252,26 @@ def main():
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
     print(f"Device: {device}")
 
-    # Build criterion matching train config (FocalLoss + class weights)
+    # Load class weights once; used by both loss variants
     cw_path = Path("data/processed/class_weights.npy")
     if cw_path.exists():
         class_weights = torch.from_numpy(np.load(cw_path)).float().to(device)
     else:
         class_weights = None
-    criterion = RLSTMLoss(
+
+    # HMR-BiLSTM was trained with FocalLoss; LSTM/BiLSTM were trained with CrossEntropyLoss.
+    # Using the wrong loss for FGSM perturbation generation biases the gradient direction.
+    hmr_criterion = RLSTMLoss(
         lambda_smooth=0.003,
         class_weights=class_weights,
         use_focal=True,
         focal_gamma=1.5,
     )
-    print(f"Criterion: FocalLoss(gamma=1.5), class_weights={'loaded' if class_weights is not None else 'None'}")
+    baseline_criterion = RLSTMLoss(
+        lambda_smooth=0.0,
+        class_weights=class_weights,
+        use_focal=False,
+    )
 
     test_loader = build_test_loader(batch_size=128)
     output_dir = Path("results/figures")
@@ -281,6 +288,9 @@ def main():
         except Exception as exc:
             print(f"  Failed to load {model_name}: {exc}")
             continue
+
+        criterion = hmr_criterion if model_name.startswith("HMR-BiLSTM") else baseline_criterion
+        print(f"  Criterion: {'FocalLoss' if model_name.startswith('HMR-BiLSTM') else 'CrossEntropyLoss'}")
 
         for epsilon in DEFAULT_EPSILONS:
             print(f"  Evaluating {model_name} @ epsilon={epsilon}")

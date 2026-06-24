@@ -274,14 +274,14 @@ def main():
 
     print("[Loading HMR-BiLSTM and test data]")
     try:
-        test = np.load("data/processed/test.npz")
+        test = np.load("data/processed/splits/inter_test.npz")
         X_test, y_test = test["X"], test["y"]
     except Exception as e:
         print(f"❌ Error loading test data: {e}")
         return
 
     input_size = X_test.shape[-1] if len(X_test.shape) > 2 else 1
-    checkpoint_path = "results/checkpoints/best_rlstm.pt"
+    checkpoint_path = "results/checkpoints/inter_best_rlstm.pt"
     model, ckpt = load_hmr_bilstm(checkpoint_path, device, input_size)
 
     print(f"  Best epoch: {ckpt['epoch']}, val F1_macro: {ckpt.get('val_f1_macro', 0):.4f}")
@@ -304,11 +304,12 @@ def main():
 
     all_results["hmr_bilstm"] = {
         "accuracy":         accuracy_score(y_test, preds),
-        "precision_macro":  precision_score(y_test, preds, average="macro", zero_division=0),
-        "recall_macro":     recall_score(y_test, preds, average="macro", zero_division=0),
-        "f1_macro":         f1_score(y_test, preds, average="macro", zero_division=0),
-        "f1_weighted":      f1_score(y_test, preds, average="weighted", zero_division=0),
-        "auc_ovr":          roc_auc_score(y_test, probs, multi_class="ovr", average="macro"),
+        "precision_macro":  precision_score(y_test, preds, labels=[0, 1, 2, 3], average="macro", zero_division=0),
+        "recall_macro":     recall_score(y_test, preds, labels=[0, 1, 2, 3], average="macro", zero_division=0),
+        "f1_macro":         f1_score(y_test, preds, labels=[0, 1, 2, 3], average="macro", zero_division=0),
+        "f1_weighted":      f1_score(y_test, preds, labels=[0, 1, 2, 3], average="weighted", zero_division=0),
+        "auc_ovr":          roc_auc_score(y_test, probs[:, :4] / probs[:, :4].sum(axis=1, keepdims=True),
+                                          multi_class="ovr", average="macro", labels=[0, 1, 2, 3]),
     }
 
     plot_comparison_bars(all_results, fig_dir / "comparison_bars.png")

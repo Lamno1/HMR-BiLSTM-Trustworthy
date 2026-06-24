@@ -30,7 +30,7 @@ def fgsm_attack(model, x, y, epsilon, criterion):
         loss.backward()
 
     perturbation = epsilon * x_adv.grad.sign()
-    x_adv = (x + perturbation).detach()
+    x_adv = (x + perturbation).clamp(x.min(), x.max()).detach()
     delta = x_adv - x
     return x_adv, delta
 
@@ -134,7 +134,6 @@ def evaluate_fgsm(model, dataloader, device, criterion, epsilon=0.02):
 
     result = {
         "epsilon": epsilon,
-        "label_accuracy": float(acc),
         "accuracy": float(acc),
         "macro_f1": float(macro_f1),
         "macro_recall": float(macro_recall),

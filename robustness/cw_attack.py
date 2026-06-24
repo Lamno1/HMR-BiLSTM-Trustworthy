@@ -212,7 +212,7 @@ def main():
     paths["out_robust"].mkdir(parents=True, exist_ok=True)
 
     rob_cfg    = cfg["robustness"]
-    cw_c       = rob_cfg.get("cw_c", 1e-4)
+    cw_c       = rob_cfg.get("cw_c", 1e-2)
     cw_steps   = rob_cfg.get("cw_steps", 1000)
     seed       = cfg.get("seed", 42)
 

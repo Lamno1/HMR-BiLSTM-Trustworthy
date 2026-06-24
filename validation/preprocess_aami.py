@@ -45,24 +45,27 @@ def extract_beats():
         sig = record.p_signal[:, 0]
         fs = record.fs
         
-        # Resample signal to 125 Hz using polyphase filtering
-        sig_125 = signal.resample_poly(sig, 125, int(fs))
-        
+        # Resample signal to 125 Hz using polyphase filtering.
+        # Use round() for the denominator so non-integer fs values (e.g. 360.0)
+        # produce an exact integer ratio instead of being silently truncated.
+        fs_int = int(round(fs))
+        sig_125 = signal.resample_poly(sig, 125, fs_int)
+
         # Map annotations and segment
         for i in range(len(ann.sample)):
             symbol = ann.symbol[i]
             if symbol in AAMI_MAPPING:
                 label = AAMI_MAPPING[symbol]
                 ann_sample = ann.sample[i]
-                
-                # Resampled peak index
+
+                # Resampled peak index (use float fs for precision)
                 peak_idx = int(ann_sample * 125 / fs)
                 
                 # Extract window of 187 samples (90 before, 97 after)
                 start = peak_idx - 90
                 end = peak_idx + 97
                 
-                if start >= 0 and end < len(sig_125):
+                if start >= 0 and end <= len(sig_125):
                     beat = sig_125[start:end]
                     all_beats.append({
                         'patient': r,
@@ -72,9 +75,11 @@ def extract_beats():
                         
     print(f"Extracted {len(all_beats)} beats in total.")
     
-    # Save the full extracted beats to a temporary file
-    np.savez_compressed(out_dir / "all_extracted_beats.npz", data=all_beats)
-    print("Full extracted beats saved.")
+    # Save the full extracted beats as JSON (npz with list-of-dicts requires allow_pickle=True)
+    beats_json_path = out_dir / "all_extracted_beats.json"
+    with open(beats_json_path, "w", encoding="utf-8") as f:
+        json.dump(all_beats, f)
+    print(f"Full extracted beats saved to {beats_json_path}.")
     
     # --- 1. Generate Inter-patient split ---
     print("Generating Inter-patient split...")
@@ -128,9 +133,10 @@ def extract_beats():
         # Force padding for 5 classes (0: N, 1: S, 2: V, 3: F, 4: Q) to ensure stable output
         dist_dict = {u: c for u, c in zip(unique, counts)}
         print(f"  {name}: ", end="")
+        n_total = len(y) if len(y) > 0 else 1
         for cls in range(5):
             c = dist_dict.get(cls, 0)
-            print(f"Class {cls}: {c:<5} ({c/len(y)*100:5.1f}%) | ", end="")
+            print(f"Class {cls}: {c:<5} ({c/n_total*100:5.1f}%) | ", end="")
         print()
     
     print("\nInter-patient Class Distribution:")
@@ -138,26 +144,35 @@ def extract_beats():
     print_dist("Val (DS1)", y_val)
     print_dist("Test (DS2)", y_test)
     
-    # --- 2. Generate Intra-patient split ---
-    print("Generating Intra-patient split...")
-    # Shuffle all beats and split
-    np.random.seed(42)
-    indices = np.arange(len(all_beats))
-    np.random.shuffle(indices)
-    
-    num_train = int(len(all_beats) * 0.7)
-    num_val = int(len(all_beats) * 0.15)
-    
-    train_idx = indices[:num_train]
-    val_idx = indices[num_train:num_train+num_val]
-    test_idx = indices[num_train+num_val:]
+    # --- 2. Generate Intra-patient split (stratified) ---
+    print("Generating Intra-patient split (stratified)...")
+    from sklearn.model_selection import train_test_split as _tts
+    y_all_tmp = np.array([b['y'] for b in all_beats], dtype=np.int64)
+    all_idx = np.arange(len(all_beats))
+    train_idx, tmp_idx = _tts(all_idx, test_size=0.30, stratify=y_all_tmp, random_state=42)
+    y_tmp = y_all_tmp[tmp_idx]
+    val_idx, test_idx = _tts(tmp_idx, test_size=0.5, stratify=y_tmp, random_state=42)
     
     X_all = np.array([b['x'] for b in all_beats], dtype=np.float32).reshape(-1, 187, 1)
     y_all = np.array([b['y'] for b in all_beats], dtype=np.int64)
-    
-    np.savez(out_dir / "intra_train.npz", X=X_all[train_idx], y=y_all[train_idx])
-    np.savez(out_dir / "intra_val.npz", X=X_all[val_idx], y=y_all[val_idx])
-    np.savez(out_dir / "intra_test.npz", X=X_all[test_idx], y=y_all[test_idx])
+
+    X_intra_train = X_all[train_idx]
+    X_intra_val   = X_all[val_idx]
+    X_intra_test  = X_all[test_idx]
+
+    # Normalize using intra train-only statistics (same convention as inter-patient splits)
+    intra_mean = X_intra_train.mean()
+    intra_std  = X_intra_train.std() + 1e-8
+    X_intra_train = (X_intra_train - intra_mean) / intra_std
+    X_intra_val   = (X_intra_val   - intra_mean) / intra_std
+    X_intra_test  = (X_intra_test  - intra_mean) / intra_std
+    print(f"  Intra norm — mean: {intra_mean:.6f}  std: {intra_std:.6f}")
+
+    np.savez(out_dir / "intra_train.npz", X=X_intra_train, y=y_all[train_idx])
+    np.savez(out_dir / "intra_val.npz",   X=X_intra_val,   y=y_all[val_idx])
+    np.savez(out_dir / "intra_test.npz",  X=X_intra_test,  y=y_all[test_idx])
+    np.save(out_dir / "intra_norm_mean.npy", np.array([intra_mean], dtype=np.float32))
+    np.save(out_dir / "intra_norm_std.npy",  np.array([intra_std],  dtype=np.float32))
     print(f"Intra-patient splits saved: train={len(train_idx)}, val={len(val_idx)}, test={len(test_idx)}")
     
     return True

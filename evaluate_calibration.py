@@ -2,6 +2,7 @@ import argparse
 import numpy as np
 import torch
 import torch.nn.functional as F
+import yaml
 from pathlib import Path
 import matplotlib
 matplotlib.use("Agg")
@@ -12,6 +13,7 @@ from torch.utils.data import DataLoader, TensorDataset
 # Import model loaders from existing scripts
 from report_results import load_hmr_bilstm
 from evaluate_fgsm import load_baseline_model, build_test_loader
+from calibration.temperature_scaling import TemperatureScaling, build_val_loader
 
 def calculate_brier_score(probs, labels, num_classes=5):
     """
@@ -25,7 +27,7 @@ def calculate_brier_score(probs, labels, num_classes=5):
     brier_score = np.mean(np.sum((probs - y_true)**2, axis=1))
     return brier_score
 
-def calculate_ece(probs, labels, num_bins=10):
+def calculate_ece(probs, labels, num_bins=15):
     """
     Calculate Expected Calibration Error (ECE) for multi-class classification.
     Uses the predicted class's probability and whether it matches the true label.
@@ -81,6 +83,17 @@ def get_model_predictions(model, dataloader, device):
     all_probs = np.concatenate(all_probs)
     all_labels = np.concatenate(all_labels)
     return all_probs, all_labels
+
+def get_model_logits(model, dataloader, device):
+    model.eval()
+    all_logits = []
+    all_labels = []
+    with torch.no_grad():
+        for x, y in dataloader:
+            x = x.to(device)
+            all_logits.append(model(x).cpu())
+            all_labels.append(y)
+    return torch.cat(all_logits), torch.cat(all_labels)
 
 def plot_reliability_diagram(models_stats, output_path):
     """
@@ -195,6 +208,12 @@ def main():
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
     print(f"Using device: {device}")
 
+    config_path = Path("configs/experiment_config.yaml")
+    cfg = yaml.safe_load(config_path.read_text(encoding="utf-8")) if config_path.exists() else {}
+    num_bins  = cfg.get("calibration", {}).get("num_bins", 15)
+    temp_lr   = cfg.get("calibration", {}).get("temp_lr", 0.01)
+    temp_iter = cfg.get("calibration", {}).get("temp_max_iter", 50)
+
     # Load test data
     test_loader = build_test_loader(batch_size=128)
 
@@ -210,38 +229,60 @@ def main():
         if not Path(ckpt_path).exists():
             print(f"Checkpoint not found: {ckpt_path}")
             continue
-            
+
         print(f"\nEvaluating {model_name}...")
         if m_type == "rlstm":
             model, _ = load_hmr_bilstm(ckpt_path, device)
         else:
             model, _ = load_baseline_model(ckpt_path, device)
-            
+
         probs, labels = get_model_predictions(model, test_loader, device)
-        
-        brier = calculate_brier_score(probs, labels)
-        ece, bin_stats = calculate_ece(probs, labels, num_bins=10)
-        
+
+        brier                    = calculate_brier_score(probs, labels)
+        ece_uncal, bin_stats     = calculate_ece(probs, labels, num_bins=num_bins)
+        ece_cal, bin_stats_cal   = None, None
+        optimal_temp             = None
+
+        if m_type == "rlstm":
+            val_loader   = build_val_loader(batch_size=128)
+            ts_model     = TemperatureScaling().to(device)
+            optimal_temp = ts_model.fit(model, val_loader, device,
+                                        lr=temp_lr, max_iter=temp_iter)
+            logits, _ = get_model_logits(model, test_loader, device)
+            logits     = logits.to(device)
+            with torch.no_grad():
+                cal_probs = torch.softmax(ts_model(logits), dim=1).cpu().numpy()
+            ece_cal, bin_stats_cal = calculate_ece(cal_probs, labels, num_bins=num_bins)
+
         print(f"{model_name} Results:")
-        print(f"  ECE: {ece:.4f}")
+        print(f"  ECE (uncalibrated): {ece_uncal:.4f}")
+        if ece_cal is not None:
+            print(f"  ECE (calibrated,  T={optimal_temp:.4f}): {ece_cal:.4f}")
         print(f"  Brier Score: {brier:.4f}")
-        
+
         results[model_name] = {
-            'ece': ece,
-            'brier': brier,
-            'bin_stats': bin_stats
+            'ece':            ece_uncal,
+            'ece_calibrated': ece_cal,
+            'temperature':    optimal_temp,
+            'brier':          brier,
+            'bin_stats':      bin_stats,
         }
 
     output_dir = Path("results/figures")
     output_dir.mkdir(parents=True, exist_ok=True)
-    
+
     # ── Save CSV ──────────────────────────────────────────────────────────────
     csv_path = Path("results/tables/calibration_results.csv")
+    csv_path.parent.mkdir(parents=True, exist_ok=True)
     # Sort by ECE ascending so best model is first
     sorted_results = sorted(results.items(), key=lambda x: x[1]['ece'])
     with open(csv_path, 'w', newline='', encoding='utf-8') as f:
         writer = csv.writer(f)
-        writer.writerow(['Rank', 'Model', 'ECE (lower=better)', 'Brier Score (lower=better)', 'ECE Interpretation', 'Brier Interpretation'])
+        writer.writerow([
+            'Rank', 'Model',
+            'ECE_uncalibrated', 'ECE_calibrated (HMR-BiLSTM only)',
+            'Brier Score', 'ECE Interpretation', 'Brier Interpretation'
+        ])
         for rank, (model_name, stats) in enumerate(sorted_results, start=1):
             ece_interp   = 'Excellent (<0.02)' if stats['ece'] < 0.02 else (
                            'Good (0.02-0.05)'  if stats['ece'] < 0.05 else (
@@ -249,9 +290,10 @@ def main():
             brier_interp = 'Excellent (<0.05)' if stats['brier'] < 0.05 else (
                            'Good (0.05-0.10)'  if stats['brier'] < 0.10 else (
                            'Fair (0.10-0.20)'  if stats['brier'] < 0.20 else 'Poor (>=0.20)'))
+            ece_cal_str = f"{stats['ece_calibrated']:.4f}" if stats.get('ece_calibrated') is not None else "N/A"
             writer.writerow([
                 rank, model_name,
-                f"{stats['ece']:.4f}",
+                f"{stats['ece']:.4f}", ece_cal_str,
                 f"{stats['brier']:.4f}",
                 ece_interp, brier_interp
             ])

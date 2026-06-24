@@ -117,7 +117,7 @@ def evaluate(model, loader, device, num_classes=5):
             # Re-normalize so rows sum to 1 for OvR
             probs_4class = probs_4class / probs_4class.sum(axis=1, keepdims=True)
             metrics["auc_ovr"] = roc_auc_score(
-                y_true, probs[:, :4],
+                y_true, probs_4class,
                 multi_class="ovr",
                 average="macro",
                 labels=present_labels,

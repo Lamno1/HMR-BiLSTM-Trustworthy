@@ -58,7 +58,7 @@ def get_field(d: dict, key: str):
     return d.get(key, None)
 
 
-def find_calibration_across_runs(target_hash: str) -> dict | None:
+def find_calibration_across_runs(target_hash: str):
     """
     FIX LỖI 2+4: Calibration may have been saved under a different run-id.
     Search all outputs/v1.0_*/ directories for calibration/results.json whose
@@ -79,7 +79,7 @@ def find_calibration_across_runs(target_hash: str) -> dict | None:
     return None
 
 
-def find_autoattack_json(run_robust_path: Path, target_hash: str) -> dict | None:
+def find_autoattack_json(run_robust_path: Path, target_hash: str):
     """
     FIX LỖI 1: Try robustness/auto_attack.py JSON first (correct path),
     then fallback to searching across all run folders for matching checkpoint_hash,
@@ -119,7 +119,7 @@ def find_autoattack_json(run_robust_path: Path, target_hash: str) -> dict | None
             # Pick Full HMR model at eps=0.02
             target = next(
                 (r for r in rows if r.get("Model", "").strip() == "Full HMR"
-                 and abs(float(r.get("Epsilon", 99))) - 0.02 < 0.001),
+                 and abs(abs(float(r.get("Epsilon", 99))) - 0.02) < 0.001),
                 None
             )
             if target is None:
@@ -284,7 +284,7 @@ def main():
 
     # ── [5/5] Robustness ──
     print("\n[5/5] Robustness results...")
-    fgsm_res_dict = load_json_results(Path("results/logs/fgsm_comparison_results.json"))
+    fgsm_res_dict = load_json_results(Path("results/logs/fgsm_baseline_comparison.json"))
     pgd_res_dict  = load_json_results(Path("results/logs/pgd_baseline_comparison.json"))
     cw_res        = load_json_results(paths["out_robust"] / "cw_attack_results.json")
     # FIX LỖI 1+4: use dedicated function with CSV fallback

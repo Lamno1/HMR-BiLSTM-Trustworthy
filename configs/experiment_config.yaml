@@ -24,14 +24,14 @@ uncertainty:
 robustness:
   fgsm_eps: [0.01, 0.02, 0.05]
   pgd_eps:  [0.01, 0.02, 0.05]
-  cw_c: 1.0e-4
+  cw_c: 1.0e-2
   cw_steps: 1000
   autoattack_eps: 0.02
   autoattack_norm: Linf
 
 explainability:
   shap_background_samples: 200
-  shap_classes: [0, 1, 2, 3]      # N, S, V, F
+  shap_classes: [0, 1, 2, 3, 4]   # N, S, V, F, Q
   shap_correct_per_class: 10
   shap_misclassified_per_class: 5
   # Average SHAP over this many background resamplings before computing Jaccard(SHAP, IG).

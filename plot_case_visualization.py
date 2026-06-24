@@ -32,8 +32,8 @@ from scipy.interpolate import interp1d
 
 from report_results import load_hmr_bilstm as load_rlstm_model
 # ─── Config ──────────────────────────────────────────────────────────────
-CHECKPOINT = "results/checkpoints/best_rlstm.pt"
-TEST_DATA  = "data/processed/test.npz"
+CHECKPOINT = "results/checkpoints/inter_best_rlstm.pt"
+TEST_DATA  = "data/processed/splits/inter_test.npz"
 OUTPUT_DIR = Path("results/figures")
 SAMPLING_RATE = 360  # Hz, MIT-BIH
 

@@ -28,7 +28,7 @@ def evaluate_sklearn_model_noise(model, X_test, y_test, noise_levels):
         else:
             X_noisy = X_test_flat
         preds = model.predict(X_noisy)
-        f1 = f1_score(y_test, preds, average="macro", zero_division=0)
+        f1 = f1_score(y_test, preds, labels=[0, 1, 2, 3], average="macro", zero_division=0)
         f1_scores.append(f1)
     return f1_scores
 
@@ -55,7 +55,7 @@ def evaluate_torch_model_noise(model, X_test, y_test, device, noise_levels, is_r
                     all_preds.append(preds)
             preds = np.concatenate(all_preds)
             
-        f1 = f1_score(y_test, preds, average="macro", zero_division=0)
+        f1 = f1_score(y_test, preds, labels=[0, 1, 2, 3], average="macro", zero_division=0)
         f1_scores.append(f1)
     return f1_scores
 
@@ -70,9 +70,9 @@ def main():
     torch.backends.cudnn.benchmark = False
     
     print("[Loading data]")
-    train = np.load("data/processed/train.npz")
-    val   = np.load("data/processed/val.npz")
-    test  = np.load("data/processed/test.npz")
+    train = np.load("data/processed/splits/inter_train.npz")
+    val   = np.load("data/processed/splits/inter_val.npz")
+    test  = np.load("data/processed/splits/inter_test.npz")
     X_tr, y_tr = train["X"], train["y"]
     X_va, y_va = val["X"], val["y"]
     X_te, y_te = test["X"], test["y"]
@@ -115,13 +115,13 @@ def main():
     # 5. HMR-BiLSTM
     print("\n[Evaluating HMR-BiLSTM]")
     # Guard against missing checkpoints
-    rlstm_ckpt = Path("results/checkpoints/best_rlstm.pt")
+    rlstm_ckpt = Path("results/checkpoints/inter_best_rlstm.pt")
     if rlstm_ckpt.exists():
         input_size = X_te.shape[-1] if len(X_te.shape) > 2 else 1
         hmr_bilstm, _ = load_hmr_bilstm(str(rlstm_ckpt), device, input_size)
         results["HMR-BiLSTM"] = evaluate_torch_model_noise(hmr_bilstm, X_te, y_te, device, noise_levels, is_rlstm=True)
     else:
-        print("[WARNING] best_rlstm.pt not found. Skipping HMR-BiLSTM.")
+        print("[WARNING] inter_best_rlstm.pt not found. Skipping HMR-BiLSTM.")
         results["HMR-BiLSTM"] = [0.0] * len(noise_levels)
     
     # Print results table

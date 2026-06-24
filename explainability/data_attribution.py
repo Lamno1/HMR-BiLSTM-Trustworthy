@@ -1,7 +1,15 @@
 """
-T-NEW — Data Attribution: TracIn Influence Functions (Single Checkpoint Approximation).
+T-NEW — Data Attribution via Gradient Cosine Similarity (single-checkpoint approximation).
 
-Influence(z_train, z_test) ≈ cosine_sim(grad_loss(z_train), grad_loss(z_test))
+This module implements gradient cosine similarity as a proxy for data influence:
+
+  Influence(z_train, z_test) ≈ cosine_sim(∇L(z_train), ∇L(z_test))
+
+NOTE ON NAMING: This is NOT TracIn (Pruthi et al. 2020). True TracIn sums influence
+across multiple training checkpoints weighted by their learning rates. This module uses
+a single final checkpoint and cosine similarity instead of dot product. It is a
+first-order approximation useful for ranking confusable samples but should not be
+reported as TracIn in publications.
 
 Terminology (deliberately conservative):
   "harmful/confusable training samples" — any sample with high harmful influence.
@@ -25,11 +33,10 @@ Why gradient over classifier params only:
   classifier.0 (Linear 192→96) + classifier.3 (Linear 96→5) ≈ 19K params.
   Full network ≈ 505K params; 96% is BiLSTM feature encoder whose gradients
   encode representation changes, not decision boundary changes.
-  Decision-boundary gradient is what TracIn requires.
 
 Outputs:
   outputs/<run_id>/explainability/
-    tracin_top_harmful.json         ← per-test top harmful samples + self-disagreement
+    tracin_top_harmful.json         ← per-test top confusable samples + self-disagreement
     label_noise_candidates.csv      ← two-signal confirmed candidates only
     tracin_waveforms/               ← waveform pair PNG for top-30 confusable samples
 """
@@ -236,7 +243,7 @@ def main():
     torch.manual_seed(seed)
 
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
-    print(f"[TracIn] Device: {device} | Run ID: {run_id}")
+    print(f"[GradCosSim] Device: {device} | Run ID: {run_id}")
 
     # ── Load model ──
     print("Loading model...")
@@ -312,7 +319,7 @@ def main():
     print(f"  Gradient matrix: {train_grads_cos.shape} (cosine-normalised)")
 
     # ── Compute influence ──
-    print("Computing TracIn cosine influence scores...")
+    print("Computing gradient cosine similarity influence scores...")
     results          = []
     confusable_list  = []   # all "harmful/confusable" samples (criterion 1+2)
     noise_confirmed  = []   # subset also passing self-disagreement (criterion 3)
@@ -484,7 +491,7 @@ def main():
             ])
     print(f"  [OK] {confusable_csv}  ({len(confusable_list)} confusable samples total)")
 
-    print(f"\n[TracIn] Complete.")
+    print(f"\n[GradCosSim] Complete.")
     print(f"  -> Visual: inspect {wave_dir}/ (files with _NOISE flag = two-signal confirmed)")
     print(f"  -> Paper claim: {len(noise_confirmed)} training samples confirmed as "
           f"likely mislabeled by TracIn + model self-disagreement")

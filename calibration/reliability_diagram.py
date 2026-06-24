@@ -32,13 +32,8 @@ def compute_bin_stats(probs: np.ndarray, labels: np.ndarray, num_bins: int = 15)
                 "mean_accuracy": acc,
                 "sample_count": count
             })
-        else:
-            bin_stats.append({
-                "bin_center": float((bin_lower + bin_upper) / 2),
-                "mean_confidence": 0.0,
-                "mean_accuracy": 0.0,
-                "sample_count": 0
-            })
+        # Empty bins are skipped entirely — phantom rows with mean_confidence=0.0
+        # mislead downstream tools (e.g. they appear as a miscalibrated point at conf=0)
             
     return bin_stats
 

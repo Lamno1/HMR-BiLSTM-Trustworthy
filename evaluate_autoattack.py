@@ -137,10 +137,9 @@ def main():
     print("Loading data...")
     X, y = load_data("data/processed/splits")
     
-    # Remove Q class entirely from our evaluation sample just to be safe
-    valid_idx = np.isin(y, [0, 1, 2, 3])
-    X, y = X[valid_idx], y[valid_idx]
-    
+    # Use stratified subset: keep all minority class samples (S, V, F, Q),
+    # subsample N class to target_N_size=2000 for manageable AutoAttack runtime.
+    # This is the approach recommended in P1_PROTOCOL_UNIFICATION_PLAN.md §6.
     X_sub, y_sub = get_stratified_subset(X, y, target_N_size=2000)
     
     d_min = float(X_sub.min())

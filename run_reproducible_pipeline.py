@@ -16,71 +16,81 @@ import os
 PIPELINE_STEPS = [
     {
         "step": 0,
-        "name": "Preprocess Data",
+        "name": "Preprocess Data (intra-patient splits)",
         "command": [sys.executable, "preprocess.py"],
     },
     {
         "step": 1,
+        "name": "Preprocess Data (inter-patient AAMI splits)",
+        "command": [sys.executable, "validation/preprocess_aami.py"],
+    },
+    {
+        "step": 2,
         "name": "Train Baseline Models (LSTM, BiLSTM, ResNet1D)",
         "command": [sys.executable, "run_baselines.py"],
     },
     {
-        "step": 2,
-        "name": "Train HMR-BiLSTM (Main Model)",
-        "command": [sys.executable, "train.py"],
+        "step": 3,
+        "name": "Train HMR-BiLSTM (Main Model — inter-patient)",
+        "command": [sys.executable, "train_inter_patient.py"],
     },
     {
-        "step": 3,
+        "step": 4,
         "name": "Run Ablation Study",
         "command": [sys.executable, "run_ablation.py"],
     },
     {
-        "step": 4,
+        "step": 5,
         "name": "Generate Core Figures",
         "command": [sys.executable, "report_results.py"],
     },
     {
-        "step": 5,
+        "step": 6,
         "name": "FGSM Adversarial Robustness Evaluation",
         "command": [sys.executable, "compare_fgsm_baselines.py"],
     },
     {
-        "step": 6,
+        "step": 7,
         "name": "PGD Adversarial Robustness Evaluation",
         "command": [sys.executable, "evaluate_pgd.py"],
     },
     {
-        "step": 7,
+        "step": 8,
+        "name": "AutoAttack Robustness Evaluation",
+        "command": [sys.executable, "evaluate_autoattack.py"],
+    },
+    {
+        "step": 9,
         "name": "Ablation Variants Robustness",
         "command": [sys.executable, "evaluate_ablation_robustness.py"],
     },
     {
-        "step": 8,
+        "step": 10,
         "name": "Gaussian Noise Robustness Evaluation",
         "command": [sys.executable, "evaluate_robustness_all.py"],
     },
     {
-        "step": 9,
+        "step": 11,
         "name": "Calibration Analysis",
         "command": [sys.executable, "evaluate_calibration.py"],
     },
     {
-        "step": 10,
+        "step": 12,
         "name": "Combine Ablation Tables",
         "command": [sys.executable, "combine_ablation_tables.py"],
     },
     {
-        "step": 11,
+        "step": 13,
         "name": "Generate Final Tables and Figures",
         "command": [sys.executable, "generate_results_tables.py"],
     },
     {
-        "step": 12,
+        "step": 14,
         "name": "Export Final Results",
         "command": [sys.executable, "plot_and_export.py"],
     },
     {
-        "step": 13,
+        "step": 15,
         "name": "Execute Trustworthiness Evaluation Dashboard (T8)",
         "command": [sys.executable, "evaluate_trustworthiness.py"],
     }

@@ -155,7 +155,11 @@ def main():
     rob_cfg      = cfg["robustness"]
     aa_eps       = rob_cfg.get("autoattack_eps",  0.02)
     aa_norm      = rob_cfg.get("autoattack_norm", "Linf")
-    pgd_eps      = 0.02
+    pgd_eps      = rob_cfg.get("pgd_eps", 0.02)
+    assert abs(aa_eps - pgd_eps) < 1e-6, (
+        f"AutoAttack eps ({aa_eps}) != PGD eps ({pgd_eps}): "
+        "both must use the same normalised-input epsilon budget for comparable robustness figures."
+    )
     seed         = cfg.get("seed", 42)
 
     n_eval = 200   # subset to attack
@@ -241,18 +245,14 @@ def main():
             self.d_min = d_min
             self.d_max = d_max
         def forward(self, x):
-            # Handle possible 4D inputs from AutoAttack (e.g., shape N, C, H, W where C=1, H=1 or W=1)
+            # AutoAttack passes (N, 1, T, 1); strip the two dummy dims to get (N, T)
             if x.dim() == 4:
-                if x.shape[1] == 1:
-                    x = x.squeeze(1)
-                if x.shape[-1] == 1:
-                    x = x.squeeze(-1)
-            
-            # Map back to (N, T, 1)
-            if x.dim() == 2:
-                x = x.unsqueeze(-1)
+                x = x[:, 0, :, 0]   # (N, T)
             elif x.dim() == 3 and x.shape[1] == 1:
-                x = x.permute(0, 2, 1)
+                x = x[:, 0, :]      # (N, T)
+
+            # Model expects (N, T, 1)
+            x = x.unsqueeze(-1)
                 
             x_real = x * (self.d_max - self.d_min) + self.d_min
             return self.m(x_real)

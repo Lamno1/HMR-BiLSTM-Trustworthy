@@ -213,7 +213,8 @@ def table_clean():
 # ── Table 2: FGSM Robustness ───────────────────────────────────────────────────
 def table_fgsm():
     header = ["Model", "F1 (clean)", "F1 (adv)", "F1 drop", "ASR",
-              "Rec-S clean", "Rec-S adv", "Rec-V clean", "Rec-V adv"]
+              "Rec-S clean", "Rec-S adv", "Rec-V clean", "Rec-V adv",
+              "Rec-F clean", "Rec-F adv"]
     models = list(FGSM.keys())
     adv_f1s = [FGSM[m]["adv_f1"] for m in models]
     rows = []
@@ -229,6 +230,7 @@ def table_fgsm():
             fmt(d["asr"], 4),
             fmt(d["rec_s_c"]), fmt(d["rec_s_a"]),
             fmt(d["rec_v_c"]), fmt(d["rec_v_a"]),
+            fmt(d.get("rec_f_c", float("nan"))), fmt(d.get("rec_f_a", float("nan"))),
         ])
     write_csv_and_latex(rows, header, "table2_fgsm_robustness",
         caption="FGSM adversarial robustness (epsilon=0.02). ASR = Attack Success Rate.",

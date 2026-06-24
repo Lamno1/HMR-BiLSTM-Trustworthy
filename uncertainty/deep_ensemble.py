@@ -24,7 +24,6 @@ Outputs:
 
 import json
 import yaml
-import copy
 import numpy as np
 import torch
 import torch.nn as nn
@@ -127,7 +126,7 @@ def plot_member_agreement(probs_ens: np.ndarray, y_true: np.ndarray,
     predictions. High disagreement on wrong predictions is a good property.
     """
     p_bar = probs_ens.mean(axis=0)   # (N, C)
-    std_max = probs_ens.max(axis=2).std(axis=0)  # per-sample confidence std
+    std_max = probs_ens.std(axis=0).mean(axis=1)  # mean std across classes per sample
 
     preds = p_bar.argmax(axis=1)
     correct_mask = preds == y_true

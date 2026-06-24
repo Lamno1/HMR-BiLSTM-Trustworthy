@@ -62,7 +62,7 @@ def enable_mc_dropout(model: nn.Module) -> nn.Module:
     """
     model.eval()
     for m in model.modules():
-        if isinstance(m, nn.Dropout):
+        if isinstance(m, (nn.Dropout, nn.Dropout2d, nn.Dropout3d, nn.AlphaDropout)):
             m.train()
     return model
 
@@ -81,6 +81,7 @@ def ood_baseline_wander(X: np.ndarray, freq: float = 0.3, amp: float = 0.8,
                          rng=None) -> np.ndarray:
     """Sinusoidal baseline wander — common real-world ECG artifact."""
     T = X.shape[1]
+    # freq is in cycles per 187-sample beat window (not Hz)
     t = np.linspace(0, 2 * np.pi * freq * T / 187, T).astype(np.float32)
     wander = amp * np.sin(t)  # (T,)
     return X + wander[None, :, None]
@@ -113,7 +114,7 @@ def ood_signal_shift(X: np.ndarray, shift_frac: float = 0.2,
     if max_shift <= 0:
         return X.copy()
     shifts = rng.integers(-max_shift, max_shift, size=len(X))
-    X_out = np.stack([np.roll(X[i], s, axis=0) for i, s in enumerate(shifts)])
+    X_out = np.stack([np.roll(X[i], s, axis=0) for i, s in enumerate(shifts)])  # axis=0 is the time (sample) axis
     return X_out
 
 
@@ -190,6 +191,10 @@ def compute_uncertainty(probs_mc: np.ndarray):
 
     # Mutual information (epistemic) = total − aleatoric
     mi = entropy - expected_entropy
+    n_negative_mi = int((mi < 0).sum())
+    if n_negative_mi > 0:
+        print(f"  Warning: {n_negative_mi}/{len(mi)} MI values were negative (clipped to 0); "
+              f"consider increasing n_mc_samples.")
     mi = np.clip(mi, 0, None)
 
     conf = p_bar.max(axis=1)
@@ -250,7 +255,7 @@ def plot_confidence_calibration(preds: np.ndarray, labels: np.ndarray,
 
     fig, ax = plt.subplots(figsize=(7, 7))
     ax.plot([0, 1], [0, 1], "k--", alpha=0.5, label="Perfect calibration")
-    ax.bar(bin_conf, bin_acc, width=0.08, alpha=0.7, color="#7B1FA2",
+    ax.bar(bin_conf, bin_acc, width=1.0/n_bins, alpha=0.7, color="#7B1FA2",
            label="MC Dropout accuracy per bin")
     ax.plot(bin_conf, bin_acc, "o-", color="#4A148C", linewidth=1.5)
     ax.set_xlabel("Mean MC Confidence", fontsize=12)

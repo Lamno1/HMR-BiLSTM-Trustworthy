@@ -3,7 +3,7 @@ Chạy các baselines cho MIT-BIH ECG (PHIÊN BẢN TỐI ƯU).
 
 Cấu hình:
 - LR + DT: chạy nhanh trên CPU (~1-2 phút mỗi cái)
-- LSTM/BiLSTM: hidden=96, epochs=12, early stop patience=4
+- LSTM/BiLSTM: hidden=96, epochs=45, early stop patience=4
 - num_workers=0 + pin_memory=False để tránh treo trên Windows
 
 Cách chạy:
@@ -171,7 +171,6 @@ def run_decision_tree(train, test):
     model.fit(X_tr_flat, y_tr)
     train_time = time.time() - t0
 
-    y_pred = model.predict(X_tr_flat)
     y_pred = model.predict(X_te_flat)
     y_prob = model.predict_proba(X_te_flat)
     
@@ -324,7 +323,7 @@ class ResNet1D(nn.Module):
 
 
 def train_modern_baseline(name, model, train, val, test, device,
-                           class_weights=None, epochs=12):
+                           class_weights=None, epochs=45):
     """
     Training loop dùng chung cho ResNet1D và TransformerECG.
     Giống với train_lstm_baseline về config: Adam lr=1e-3, patience=4,
@@ -433,7 +432,7 @@ def train_modern_baseline(name, model, train, val, test, device,
 
 
 def train_lstm_baseline(name, train, val, test, bidirectional, device,
-                        class_weights=None, epochs=12):
+                        class_weights=None, epochs=45):
     X_tr, y_tr = train
     X_va, y_va = val
     X_te, y_te = test
@@ -560,14 +559,15 @@ def main():
     train_data, val_data, test_data = load_data()
     print(f"  Train: {train_data[0].shape}, Test: {test_data[0].shape}")
 
-    cw_path = "data/processed/class_weights.npy"
-    if Path(cw_path).exists():
-        cw = torch.from_numpy(np.load(cw_path)).float()
-    else:
-        y_tr = train_data[1]
-        counts = np.bincount(y_tr)
-        cw = torch.from_numpy(len(y_tr) / (len(counts) * counts)).float()
-    print(f"  Class weights: {cw.numpy()}")
+    # Compute class weights from inter-patient training distribution (issue #6)
+    # Do NOT use data/processed/class_weights.npy which is from intra-patient splits
+    y_inter_tr = train_data[1]
+    counts = np.bincount(y_inter_tr, minlength=5).astype(np.float64)
+    counts = np.where(counts == 0, 1e-9, counts)  # avoid division by zero
+    cw_arr = counts.sum() / (5.0 * counts)
+    cw_arr = np.clip(cw_arr, 0.5, 50.0).astype(np.float32)
+    cw = torch.from_numpy(cw_arr).float()
+    print(f"  Class weights (inter-patient): {cw.numpy()}")
 
     all_results = {}
 
@@ -585,7 +585,7 @@ def main():
     all_results["lstm"] = train_lstm_baseline(
         "LSTM", train_data, val_data, test_data,
         bidirectional=False, device=device, class_weights=cw,
-        epochs=12,
+        epochs=45,
     )
     print(f"  Test F1_macro: {all_results['lstm']['f1_macro']:.4f}, "
           f"AUC: {all_results['lstm']['auc_ovr']:.4f}")
@@ -594,7 +594,7 @@ def main():
     all_results["bilstm"] = train_lstm_baseline(
         "BiLSTM", train_data, val_data, test_data,
         bidirectional=True, device=device, class_weights=cw,
-        epochs=12,
+        epochs=45,
     )
     print(f"  Test F1_macro: {all_results['bilstm']['f1_macro']:.4f}, "
           f"AUC: {all_results['bilstm']['auc_ovr']:.4f}")
@@ -609,7 +609,7 @@ def main():
     )
     all_results["resnet1d"] = train_modern_baseline(
         "ResNet1D", resnet_model, train_data, val_data, test_data,
-        device=device, class_weights=cw, epochs=12,
+        device=device, class_weights=cw, epochs=45,
     )
     
     print(f"  Test F1_macro: {all_results['resnet1d']['f1_macro']:.4f}, "

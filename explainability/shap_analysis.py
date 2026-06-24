@@ -36,8 +36,8 @@ from configs.paths import get_run_id, build_paths, RLSTM_CKPT, get_checkpoint_ha
 from report_results import load_hmr_bilstm
 
 
-CLASS_NAMES  = {0: "N", 1: "S", 2: "V", 3: "F"}
-SHAP_CLASSES = [0, 1, 2, 3]
+CLASS_NAMES  = {0: "N", 1: "S", 2: "V", 3: "F", 4: "Q"}
+SHAP_CLASSES = [0, 1, 2, 3, 4]
 
 
 # ── Wrapper: logits only ─────────────────────────────────────────────────────
@@ -199,10 +199,12 @@ def main():
             f"WRONG AXIS — stop and debug normalize_shap_output."
         )
     print("[AXIS CHECK] PASSED — class axis confirmed correct for 4D ndarray (t=0 blind spot excluded).")
-    shap_classes = exp_cfg.get("shap_classes", [0, 1, 2, 3])
+    shap_classes = exp_cfg.get("shap_classes", [0, 1, 2, 3, 4])
 
 
     # CPU budget: cap background and summary to keep runtime < 10 min
+    if n_background > 100:
+        print(f"Warning: n_background capped from {n_background} to 100 (GradientExplainer budget limit).")
     n_background = min(n_background, 100)   # GradientExplainer is heavier per-sample
     n_summary    = 200                       # samples for global importance
     # Number of background resamplings to average SHAP values.
@@ -336,9 +338,9 @@ def main():
     shap_runs = []  # list of shap_vals per run, each a list/ndarray of length n_classes
     for run_i in range(n_shap_runs):
         run_seed = seed + run_i * 1000
-        np.random.seed(run_seed)
+        rng_run = np.random.default_rng(run_seed)
         torch.manual_seed(run_seed)
-        bg_idx = np.random.choice(len(X_train), n_background, replace=False)
+        bg_idx = rng_run.choice(len(X_train), n_background, replace=False)
         X_bg   = torch.from_numpy(X_train[bg_idx]).to(device)
         
         explainer = shap.GradientExplainer(wrapper, X_bg)

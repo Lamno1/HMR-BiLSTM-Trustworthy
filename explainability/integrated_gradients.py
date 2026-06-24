@@ -100,12 +100,27 @@ def plot_ig(signal, attribution, cls_name, save_path, title):
 
 
 def jaccard_with_tolerance(set_a, set_b, tolerance=2, T=187):
-    """Symmetric Jaccard index with a temporal tolerance window."""
-    matched_a = set(a for a in set_a if any(abs(a - b) <= tolerance for b in set_b))
-    matched_b = set(b for b in set_b if any(abs(b - a) <= tolerance for a in set_a))
-    intersection = (len(matched_a) + len(matched_b)) / 2.0
-    union = len(set_a) + len(set_b) - intersection
-    return intersection / max(1.0, union)
+    """Symmetric Jaccard index with a temporal tolerance window.
+
+    Uses greedy bijective matching so each element of set_b is consumed
+    by at most one element of set_a (matched to the nearest within tolerance).
+    This yields a true intersection cardinality and avoids double-counting
+    when one element in B is within tolerance of multiple elements in A.
+
+    Example: A={90,91,92}, B={90}, tol=2
+      matched=1, union=3+1-1=3, Jaccard=1/3  (was wrongly 1.0 before)
+    """
+    set_a_sorted = sorted(set_a)
+    set_b_remaining = sorted(set_b)
+    matched = 0
+    for a in set_a_sorted:
+        candidates = [b for b in set_b_remaining if abs(a - b) <= tolerance]
+        if candidates:
+            best = min(candidates, key=lambda b: abs(a - b))
+            matched += 1
+            set_b_remaining.remove(best)
+    union = len(set_a) + len(set_b) - matched
+    return matched / max(1, union)
 
 
 def main():
@@ -182,7 +197,7 @@ def main():
 
     # — Integrated Gradients —
     ig = IntegratedGradients(model)
-    n_steps  = 50
+    n_steps  = 200
     ig_stats = {}
     k1_results = {}
     consistency = {}
@@ -281,7 +296,7 @@ def main():
                  f"Mean conv. delta: {mean_delta:.4f}")
         
         # Plot utilizing the mean absolute attribution of the KIỂM 1 beats
-        mean_abs_attribution_plot = np.mean(all_attrs, axis=0)  # Keep signed mean for positive/negative highlights
+        mean_abs_attribution_plot = np.mean(np.abs(all_attrs), axis=0)
         plot_ig(signal, mean_abs_attribution_plot, cls_label, output_dir / fname, title)
 
         ig_stats[cn] = {

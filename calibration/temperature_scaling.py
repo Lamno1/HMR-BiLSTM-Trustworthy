@@ -26,6 +26,7 @@ class TemperatureScaling(nn.Module):
 
     def fit(self, model, val_loader, device, lr=0.01, max_iter=50):
         """Fits temperature scaling parameter on the validation set."""
+        self.to(device)
         model.eval()
         logits_list = []
         labels_list = []
@@ -49,12 +50,19 @@ class TemperatureScaling(nn.Module):
             loss.backward()
             return loss
             
+        nll_before = eval_val().item()
         optimizer.step(eval_val)
-        
+
         # Clamp temperature to avoid extremely small or negative values
         with torch.no_grad():
             self.temperature.clamp_(min=1e-3)
-            
+
+        with torch.no_grad():
+            nll_after = nll_criterion(self.forward(logits), labels).item()
+        if nll_after >= nll_before:
+            print(f"Warning: temperature scaling did not converge (NLL {nll_before:.4f} -> {nll_after:.4f})")
+        else:
+            print(f"Temperature scaling converged: NLL {nll_before:.4f} -> {nll_after:.4f}")
         print(f"Optimal temperature: {self.temperature.item():.4f}")
         return self.temperature.item()
 

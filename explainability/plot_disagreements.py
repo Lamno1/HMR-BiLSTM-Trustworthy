@@ -8,7 +8,11 @@ from report_results import load_hmr_bilstm
 from explainability.data_attribution import plot_waveform_pair
 
 def main():
-    out_dir = Path("outputs/v1.0_20260616_061207/explainability")
+    with open("configs/experiment_config.yaml", "r", encoding="utf-8") as f:
+        cfg = yaml.safe_load(f)
+    run_id = get_run_id(cfg)
+    paths = build_paths(run_id)
+    out_dir = paths["out_explain"]
     wave_dir = out_dir / "tracin_waveforms"
     wave_dir.mkdir(parents=True, exist_ok=True)
 

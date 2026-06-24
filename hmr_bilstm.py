@@ -178,7 +178,7 @@ class RLSTMCell(nn.Module):
         c_t = beta * c_rmc + (1.0 - beta) * c_lstm
 
         # === Bước 6: Hidden state — Eq. (14) ===
-        h_t = o_t * torch.tanh(c_t)
+        h_t = self.dropout(o_t * torch.tanh(c_t))
 
         # Lưu nội tại
         self.last_r_t = r_t
@@ -347,7 +347,7 @@ class RLSTMClassifier(nn.Module):
 # =============================================================================
 def temporal_smoothness_loss(r_seq):
     if r_seq.size(1) < 2:
-        return torch.tensor(0.0, device=r_seq.device, requires_grad=True)
+        return r_seq.sum() * 0.0
     diff = r_seq[:, 1:, :] - r_seq[:, :-1, :]
     squared_norm = (diff ** 2).sum(dim=-1)
     return squared_norm.mean()

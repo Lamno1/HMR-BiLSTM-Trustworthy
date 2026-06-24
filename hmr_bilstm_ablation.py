@@ -221,7 +221,6 @@ class RLSTMLayer(nn.Module):
         self.cell = RLSTMCell(input_size, hidden_size,
                               dropout=dropout, use_rmc=use_rmc,
                               use_hybrid=use_hybrid,  use_interaction=use_interaction)
-#        self.use_interaction = use_interaction
 
     def forward(self, x, h0=None, c0=None):
         B, T, _ = x.size()
