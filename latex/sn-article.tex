@@ -16,7 +16,7 @@
 
 \begin{document}
 
-\title[HMR-BiLSTM Framework for ECG Classification]{HMR-BiLSTM: A Robust and Interpretable Hybrid Memory Residual BiLSTM Framework for ECG Arrhythmia Classification}
+\title[Towards Trustworthy ECG Classification with HMR-BiLSTM]{HMR-BiLSTM: Towards Trustworthy ECG Arrhythmia Classification via a Robust, Interpretable Hybrid Memory Residual BiLSTM}
 
 \author{\fnm{Van Thong} \sur{NGUYEN} [0009-0007-9360-9112]}\email{nguyenthong111206@gmail.com}
 \author{\fnm{Khoi Nguyen} \sur{TRAN} [0009-0004-3486-1607]}
@@ -26,7 +26,7 @@
 \abstract{
 Automatic ECG arrhythmia classification is now common in cardiac monitoring, but detecting rare and dangerous beat types is still difficult, especially under the inter-patient protocol that best reflects real deployment, where a model never sees the test patient during training. LSTM-based models are popular yet struggle on several fronts: long-range dependencies across 187-sample heartbeats, extreme class imbalance ($\sim\!100\times$ between the majority Normal class and the rarest reliably-labelled class), and no built-in way for a clinician to see what the model is doing. We present HMR-BiLSTM, a BiLSTM augmented with a Residual Memory Control (RMC) cell and a Hybrid Memory Path. The RMC cell adds an interaction-aware residual gate on top of the standard LSTM gates and splits memory into keep and add streams weighted by learned softmax attention, while attention pooling weights computed after the recurrent loop provide a signal that can be overlaid on the ECG waveform for inspection. The Hybrid Memory Path runs the RMC cell alongside a conventional LSTM through a learnable blend gate, so the model behaves like a standard LSTM early in training and relies on the RMC pathway more as training progresses. Under the strict inter-patient DS1/DS2 protocol on MIT-BIH, the model reaches accuracy $0.931$, macro F1 $0.628$, and macro AUC $0.953$, improving macro F1 by $19.1$ percentage points over the strongest baseline we trained (ResNet1D, macro F1 $0.437$) and macro AUC by $12.0$ points over BiLSTM. Under FGSM at $\varepsilon=0.02$, HMR-BiLSTM holds macro F1 at $0.544$ versus $0.407$ for LSTM and $0.381$ for BiLSTM; under PGD-20 it holds at $0.500$ versus $0.370$ and $0.348$. We report these results together with a calibration and uncertainty-quantification study, and we are explicit that macro F1 on the two rarest classes (Supraventricular and Fusion) remains the main open problem: at this level of rigor, we did not find published inter-patient results anywhere near the $0.95$--$0.98$ range sometimes reported under weaker (intra-patient or leakage-prone) evaluation protocols, and we discuss why in Section~6.
 }
-\keywords{ECG arrhythmia classification, Interpretable AI, Robust medical AI, Bidirectional LSTM, Residual Memory Control, Adversarial robustness, AI Safety, Inter-patient evaluation.}
+\keywords{ECG arrhythmia classification, Trustworthy AI, Interpretable AI, Robust medical AI, Bidirectional LSTM, Residual Memory Control, Adversarial robustness, Calibration and uncertainty quantification, Inter-patient evaluation.}
 
 \maketitle
 
@@ -274,8 +274,23 @@ Under a strict inter-patient protocol, HMR-BiLSTM improves macro F1 by 19.1 pp a
 \section*{Acknowledgement}
 This research is funded by the University of Economics Ho Chi Minh City, Vietnam (UEH).
 
-\section*{Data Availability}
-The ECG datasets used in this study are publicly available from the MIT-BIH Arrhythmia Database (PhysioNet). The implementation code, experimental configurations, and evaluation results are available at: \url{https://github.com/Lamno1/HMR-BiLSTM-Trustworthy}
+\section*{Declarations}
+
+\textbf{Funding.} This research is funded by the University of Economics Ho Chi Minh City, Vietnam (UEH).
+
+\textbf{Conflict of interest/Competing interests.} The authors declare no conflict of interest.
+
+\textbf{Ethics approval.} Not applicable. This study uses only the publicly available, de-identified MIT-BIH Arrhythmia Database (PhysioNet); no new data were collected from human or animal subjects, and no identifiable patient information is used.
+
+\textbf{Consent to participate.} Not applicable.
+
+\textbf{Consent for publication.} Not applicable.
+
+\textbf{Availability of data and materials.} The ECG data used in this study are publicly available from the MIT-BIH Arrhythmia Database (PhysioNet).
+
+\textbf{Code availability.} The implementation code, experimental configurations, and evaluation results are available at: \url{https://github.com/Lamno1/HMR-BiLSTM-Trustworthy}
+
+\textbf{Authors' contributions.} \emph{[To be finalised alongside the author list.]}
 
 
 \setlength{\bibsep}{0pt}
