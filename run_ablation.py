@@ -4,15 +4,17 @@ run_ablation.py
 Chạy ablation study cho HMR-BiLSTM trên MIT-BIH ECG.
 
 Các variant:
-    full        — HMR-BiLSTM đầy đủ (dùng làm reference)
-    no_rmc      — bỏ RMC path, c_t = c_lstm  ← QUAN TRỌNG NHẤT
-    no_cnn      — bỏ CNN, raw ECG đi thẳng vào BiRLSTM
-    mean_pool   — thay AttentionPooling bằng mean pooling
-    no_smooth   — lambda_smooth=0 (tắt temporal smoothness loss)
-    no_adv      — adversarial_training=False (train trên clean data)
+    full            — HMR-BiLSTM đầy đủ (dùng làm reference)
+    no_rmc          — bỏ RMC path, c_t = c_lstm  ← QUAN TRỌNG NHẤT
+    no_cnn          — bỏ CNN, raw ECG đi thẳng vào BiRLSTM
+    mean_pool       — thay AttentionPooling bằng mean pooling
+    no_smooth       — lambda_smooth=0 (tắt temporal smoothness loss)
+    no_adv          — adversarial_training=False (train trên clean data)
+    no_hybrid       — bỏ beta-gated blend, c_t = c_rmc (beta=1 cố định)
+    no_interaction  — bỏ interaction term m_t trong RMC gate
 
 Cách chạy:
-    # Chạy tất cả 6 variants:
+    # Chạy tất cả 8 variants:
     python run_ablation.py
 
     # Chỉ chạy variant quan trọng nhất:
@@ -52,7 +54,7 @@ from hmr_bilstm_ablation import RLSTMClassifier, RLSTMLoss
 #  CONFIG — giữ nguyên giống train.py để so sánh fair
 # =============================================================================
 BASE_CONFIG = {
-    "data_dir":                "data/processed",
+    "data_dir":                "data/processed/splits",
     "seed":                    42,
     "batch_size":              128,
     "hidden_size":             96,
@@ -144,7 +146,7 @@ def cosine_lr(epoch, total_epochs, base_lr, min_lr):
 
 def load_data(data_dir, batch_size):
     def make_loader(split, shuffle=False):
-        d = np.load(f"{data_dir}/{split}.npz")
+        d = np.load(f"{data_dir}/inter_{split}.npz")
         ds = TensorDataset(
             torch.from_numpy(d["X"]).float(),
             torch.from_numpy(d["y"]).long(),
@@ -159,7 +161,7 @@ def load_data(data_dir, batch_size):
 
 
 @torch.no_grad()
-def evaluate(model, loader, device, num_classes=5):
+def evaluate(model, loader, device):
     model.eval()
     all_logits, all_y = [], []
     for X, y in loader:
@@ -173,19 +175,47 @@ def evaluate(model, loader, device, num_classes=5):
     probs  = torch.softmax(logits, dim=-1).numpy()
     preds  = logits.argmax(dim=-1).numpy()
 
+    # precision/recall/F1 macro & weighted are restricted to labels=[0,1,2,3] (N/S/V/F) to
+    # match the canonical protocol in train_inter_patient.py — Q (label 4) is excluded from
+    # the headline macro metrics but still reported per-class below. Accuracy stays over all
+    # 5 classes.
     metrics = {
         "accuracy":        float(accuracy_score(y_true, preds)),
-        "precision_macro": float(precision_score(y_true, preds, average="macro", zero_division=0)),
-        "recall_macro":    float(recall_score(y_true, preds, average="macro", zero_division=0)),
-        "f1_macro":        float(f1_score(y_true, preds, average="macro", zero_division=0)),
-        "f1_weighted":     float(f1_score(y_true, preds, average="weighted", zero_division=0)),
+        "precision_macro": float(precision_score(y_true, preds, labels=[0, 1, 2, 3], average="macro", zero_division=0)),
+        "recall_macro":    float(recall_score(y_true, preds, labels=[0, 1, 2, 3], average="macro", zero_division=0)),
+        "f1_macro":        float(f1_score(y_true, preds, labels=[0, 1, 2, 3], average="macro", zero_division=0)),
+        "f1_weighted":     float(f1_score(y_true, preds, labels=[0, 1, 2, 3], average="weighted", zero_division=0)),
     }
     try:
-        metrics["auc_ovr"] = float(
-            roc_auc_score(y_true, probs[:, :4], multi_class="ovr", average="macro",
-                          labels=[0, 1, 2, 3])
-        )
-    except ValueError:
+        # AUC: restrict to AAMI 4-class (labels 0-3) and only classes present in y_true.
+        valid_idx = np.isin(y_true, [0, 1, 2, 3])
+        y_true_4c = y_true[valid_idx]
+        y_prob_4c = probs[valid_idx]
+
+        present_labels = sorted(set(y_true_4c.tolist()) & {0, 1, 2, 3})
+        if len(present_labels) >= 2:
+            if y_prob_4c.shape[1] < 4:
+                y_prob_4c_padded = np.zeros((y_prob_4c.shape[0], 4))
+                y_prob_4c_padded[:, :y_prob_4c.shape[1]] = y_prob_4c
+                y_prob_4c = y_prob_4c_padded
+            else:
+                y_prob_4c = y_prob_4c[:, :4]
+
+            # Re-normalize so rows sum to 1 for OvR
+            row_sums = y_prob_4c.sum(axis=1, keepdims=True)
+            row_sums = np.where(row_sums == 0, 1e-9, row_sums)
+            y_prob_4c = y_prob_4c / row_sums
+
+            metrics["auc_ovr"] = float(roc_auc_score(
+                y_true_4c, y_prob_4c,
+                multi_class="ovr",
+                average="macro",
+                labels=present_labels,
+            ))
+        else:
+            metrics["auc_ovr"] = 0.0
+    except Exception as e:
+        print(f"  Warning: AUC calculation failed: {e}")
         metrics["auc_ovr"] = 0.0
 
     # Per-class F1 cho S, V, F (clinically important)
@@ -321,7 +351,7 @@ def train_variant(variant_name, variant_flags, cfg, device,
         train_loss = train_one_epoch(
             model, train_loader, optimizer, criterion, device, cfg
         )
-        val_m = evaluate(model, val_loader, device, cfg["num_classes"])
+        val_m = evaluate(model, val_loader, device)
         elapsed = time.time() - t0
 
         marker = ""
@@ -362,7 +392,7 @@ def train_variant(variant_name, variant_flags, cfg, device,
         return None
     ckpt = torch.load(ckpt_path, weights_only=False)
     model.load_state_dict(ckpt["model_state"], strict=True)
-    test_m = evaluate(model, test_loader, device, cfg["num_classes"])
+    test_m = evaluate(model, test_loader, device)
 
     report = classification_report(
         test_m["_y_true"], test_m["_preds"],
@@ -486,15 +516,15 @@ def main():
                  "no_smooth", "no_adv", "no_hybrid", "no_interaction"],
         default=["full", "no_rmc", "no_cnn", "mean_pool",
                  "no_smooth", "no_adv", "no_hybrid", "no_interaction"],
-        help="Variants to train. Default: all 7.",
+        help="Variants to train. Default: all 8.",
     )
     parser.add_argument(
         "--table-only", action="store_true",
         help="Skip training, load existing checkpoints and generate table.",
     )
     parser.add_argument(
-        "--data-dir", default="data/processed",
-        help="Path to processed data directory.",
+        "--data-dir", default="data/processed/splits",
+        help="Path to processed data directory (expects inter_train/inter_val/inter_test.npz).",
     )
     parser.add_argument(
         "--out-dir", default="results/ablation",
@@ -515,15 +545,18 @@ def main():
     print("\n[Loading data]")
     train_loader, val_loader, test_loader = load_data(cfg["data_dir"], cfg["batch_size"])
 
-    # Class weights
+    # Class weights (computed from inter_train to match inter-patient distribution,
+    # same approach as train_inter_patient.py — a fixed class_weights.npy file would
+    # silently mismatch once the split changes).
     class_weights = None
     if cfg["use_class_weights"]:
-        cw_path = Path(cfg["data_dir"]) / "class_weights.npy"
-        if cw_path.exists():
-            class_weights = torch.from_numpy(
-                np.load(cw_path)
-            ).float().to(device)
-            print(f"Class weights: {class_weights.cpu().numpy()}")
+        y_inter_tr = np.load(f"{cfg['data_dir']}/inter_train.npz")["y"]
+        counts = np.bincount(y_inter_tr, minlength=cfg["num_classes"]).astype(np.float64)
+        counts = np.where(counts == 0, 1e-9, counts)
+        cw_arr = counts.sum() / (float(cfg["num_classes"]) * counts)
+        cw_arr = np.clip(cw_arr, 0.5, 50.0).astype(np.float32)
+        class_weights = torch.from_numpy(cw_arr).float().to(device)
+        print(f"Class weights (inter_train): {cw_arr}")
 
     json_path = out_dir / "ablation_results.json"
     all_results = []
@@ -540,6 +573,50 @@ def main():
         if not all_results:
             print(f"[ERROR] {json_path} not found or empty. Run without --table-only first.")
             return
+
+        print("\n[table-only] Reloading checkpoints and re-evaluating on the "
+              "test set (no retraining) to refresh test_metrics...")
+        results_by_variant = {r["variant"]: r for r in all_results}
+        for variant_name, ckpt_cfg_path in (
+            (r["variant"], ckpt_dir / f"best_rlstm_{r['variant']}.pt") for r in all_results
+        ):
+            if not ckpt_cfg_path.exists():
+                print(f"  [SKIP] {variant_name}: checkpoint not found at {ckpt_cfg_path}")
+                continue
+            ckpt = torch.load(ckpt_cfg_path, weights_only=False)
+            variant_flags = ckpt["variant_flags"]
+            ckpt_cfg = ckpt["config"]
+            model = RLSTMClassifier(
+                input_size=ckpt_cfg["input_size"],
+                hidden_size=ckpt_cfg["hidden_size"],
+                dropout=ckpt_cfg["dropout"],
+                num_classes=ckpt_cfg["num_classes"],
+                cnn_out_channels=ckpt_cfg["cnn_out_channels"],
+                num_layers=ckpt_cfg["num_layers"],
+                use_rmc=variant_flags["use_rmc"],
+                use_hybrid=variant_flags.get("use_hybrid", True),
+                use_cnn=variant_flags["use_cnn"],
+                use_attention=variant_flags["use_attention"],
+                use_interaction=variant_flags.get("use_interaction", True),
+            ).to(device)
+            model.load_state_dict(ckpt["model_state"], strict=True)
+
+            test_m = evaluate(model, test_loader, device)
+            report = classification_report(
+                test_m["_y_true"], test_m["_preds"],
+                target_names=["N", "S", "V", "F", "Q"],
+                zero_division=0, digits=4,
+            )
+            clean_test = {k: v for k, v in test_m.items() if not k.startswith("_")}
+            results_by_variant[variant_name]["test_metrics"] = clean_test
+            results_by_variant[variant_name]["report"] = report
+            print(f"  [OK] {variant_name}: AUC={clean_test['auc_ovr']:.4f} "
+                  f"F1-macro={clean_test['f1_macro']:.4f}")
+
+        all_results = list(results_by_variant.values())
+        with open(json_path, "w", encoding="utf-8") as f:
+            json.dump(all_results, f, indent=2)
+        print(f"[OK] Updated results -> {json_path}")
     else:
         for variant_name in args.variants:
             if variant_name not in VARIANTS:
@@ -559,7 +636,17 @@ def main():
                 class_weights=class_weights,
                 out_dir=ckpt_dir,
             )
-            all_results.append(result)
+            if result is None:
+                continue
+
+            # Upsert theo tên variant: nếu variant đã có trong all_results
+            # (từ lần chạy trước), thay bằng kết quả mới thay vì thêm trùng dòng.
+            for i, r in enumerate(all_results):
+                if r["variant"] == result["variant"]:
+                    all_results[i] = result
+                    break
+            else:
+                all_results.append(result)
 
             # Lưu sau mỗi variant phòng crash
             json_path = out_dir / "ablation_results.json"

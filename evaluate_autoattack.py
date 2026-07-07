@@ -1,5 +1,6 @@
 import os
 import argparse
+from pathlib import Path
 import numpy as np
 import torch
 import torch.nn as nn
@@ -8,6 +9,8 @@ import pandas as pd
 from sklearn.metrics import accuracy_score, recall_score
 import torchattacks
 from hmr_bilstm_ablation import RLSTMClassifier
+from configs.paths import RLSTM_CKPT
+from report_results import load_hmr_bilstm
 
 class DenormWrapper(nn.Module):
     """
@@ -152,7 +155,16 @@ def main():
     # Clinical epsilons of interest: 0.02 (training eps), 0.03, 0.05
     epsilons = [0.02, 0.03, 0.05]
     
+    # Canonical HMR-BiLSTM (same checkpoint used by report_results.py / evaluate_fgsm.py /
+    # evaluate_pgd.py / robustness/cw_attack.py) is the required primary entry so AutoAttack
+    # numbers are comparable to the rest of the results tables. The ablation-variant
+    # checkpoints are optional extras and are skipped if not yet trained.
     variants = [
+        {
+            "name": "HMR-BiLSTM",
+            "ckpt": RLSTM_CKPT,
+            "canonical": True,
+        },
         {
             "name": "No-Adv",
             "ckpt": "results/ablation/inter/checkpoints/best_rlstm_no_adv.pt",
@@ -164,17 +176,26 @@ def main():
             "flags": {"use_rmc": True, "use_cnn": True, "use_attention": True}
         }
     ]
-    
+
     os.makedirs("results/robustness", exist_ok=True)
     all_results = []
-    
+
     for variant in variants:
+        if not Path(variant["ckpt"]).exists():
+            print(f"\n[SKIP] {variant['name']}: checkpoint not found at {variant['ckpt']}")
+            continue
+
         print(f"\n{'='*60}")
         print(f"Evaluating model variant: {variant['name']}")
         print(f"{'='*60}")
-        
-        # Load baseline model
-        base_model = load_model(variant["ckpt"], device, variant["flags"])
+
+        # Load model: canonical checkpoint uses the production RLSTMClassifier
+        # (hyperparameters read from the checkpoint's own config), ablation
+        # variants use the fixed ablation architecture flags.
+        if variant.get("canonical"):
+            base_model, _ = load_hmr_bilstm(variant["ckpt"], device)
+        else:
+            base_model = load_model(variant["ckpt"], device, variant["flags"])
         wrapper = DenormWrapper(base_model, d_min, d_max).to(device)
         wrapper.eval()
         

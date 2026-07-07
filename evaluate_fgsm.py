@@ -22,12 +22,16 @@ from configs.paths import INTER_TEST
 def fgsm_attack(model, x, y, epsilon, criterion):
     """Generate adversarial examples with FGSM using CORRECT loss function."""
     x_adv = x.clone().detach().requires_grad_(True)
-    
+
+    # cuDNN RNN (LSTM/BiLSTM) requires train mode for backward pass
+    was_training = model.training
+    model.train()
     with torch.enable_grad():
         outputs = model(x_adv)
-        loss, _ = criterion(outputs, y, r_fwd=None, r_bwd=None)  # Dùng criterion được truyền vào
+        loss, _ = criterion(outputs, y, r_fwd=None, r_bwd=None)
         model.zero_grad()
         loss.backward()
+    model.train(was_training)  # restore eval mode
 
     perturbation = epsilon * x_adv.grad.sign()
     x_adv = (x + perturbation).clamp(x.min(), x.max()).detach()
@@ -134,6 +138,7 @@ def evaluate_fgsm(model, dataloader, device, criterion, epsilon=0.02):
 
     result = {
         "epsilon": epsilon,
+        "label_accuracy": float(accuracy_score(all_labels, all_orig_preds)),
         "accuracy": float(acc),
         "macro_f1": float(macro_f1),
         "macro_recall": float(macro_recall),
@@ -381,6 +386,11 @@ def compare_models(models, epsilons, device, test_loader, output_dir: Path):
     # ============================================================
     # ĐÁNH GIÁ CÁC MODEL
     # ============================================================
+    # Per-model criterion: HMR-BiLSTM uses FocalLoss (matches training);
+    # LSTM/BiLSTM use CrossEntropyLoss (they were trained with CE, not Focal).
+    baseline_criterion = RLSTMLoss(lambda_smooth=0.0, class_weights=class_weights,
+                                   use_focal=False)
+
     comparison_results = {}
     for model_name, checkpoint_path in models.items():
         cp = Path(checkpoint_path)
@@ -391,29 +401,50 @@ def compare_models(models, epsilons, device, test_loader, output_dir: Path):
         try:
             if model_name == "HMR-BiLSTM":
                 model, _ = load_hmr_bilstm(checkpoint_path, device)
+                model_criterion = criterion
             else:
                 model, _ = load_baseline_model(checkpoint_path, device)
-            
+                model_criterion = baseline_criterion
+
             model_results = []
             for eps in epsilons:
                 print(f"  epsilon={eps}")
-                # Pass criterion to evaluate_fgsm
-                res = evaluate_fgsm(model, test_loader, device, criterion, eps)
+                res = evaluate_fgsm(model, test_loader, device, model_criterion, eps)
                 model_results.append(res)
             comparison_results[model_name] = model_results
             print(f"✓ {model_name} completed")
         except Exception as e:
+            import traceback
             print(f"✗ {model_name} failed: {e}")
+            traceback.print_exc()
 
     if not comparison_results:
         print("No models evaluated. Check checkpoint paths.")
         return
     
     output_dir.mkdir(parents=True, exist_ok=True)
-    json_path = Path("results/logs/fgsm_comparison_results.json"); json_path.parent.mkdir(parents=True, exist_ok=True)
+
+    # Primary canonical file (used by generate_results_tables.py & downstream scripts)
+    json_path = Path("results/logs/fgsm_baseline_comparison.json"); json_path.parent.mkdir(parents=True, exist_ok=True)
     with open(json_path, "w", encoding="utf-8") as f:
         json.dump(comparison_results, f, indent=2)
     print(f"\nSaved comparison results: {json_path}")
+
+    # Also keep fgsm_comparison_results.json as alias for backward compat
+    alias_path = Path("results/logs/fgsm_comparison_results.json")
+    with open(alias_path, "w", encoding="utf-8") as f:
+        json.dump(comparison_results, f, indent=2)
+    print(f"Saved alias: {alias_path}")
+
+    # Update fgsm_results.json with the HMR-BiLSTM single-model results
+    # so it stays current with the latest inter-patient checkpoint.
+    if "HMR-BiLSTM" in comparison_results:
+        hmr_results = comparison_results["HMR-BiLSTM"]
+        fgsm_json = Path("results/logs/fgsm_results.json")
+        with open(fgsm_json, "w", encoding="utf-8") as f:
+            json.dump(hmr_results, f, indent=2)
+        print(f"Updated fgsm_results.json from HMR-BiLSTM compare run: {fgsm_json}")
+
     plot_comparison(comparison_results, output_dir)
     generate_table(comparison_results, output_dir)
 
@@ -490,7 +521,7 @@ def main():
     np.random.seed(42)
 
     parser = argparse.ArgumentParser(description="Evaluate model robustness under FGSM attacks")
-    parser.add_argument("--checkpoint", default="results/checkpoints/best_rlstm.pt",
+    parser.add_argument("--checkpoint", default="results/checkpoints/inter_best_rlstm.pt",
                         help="Path to the trained model checkpoint")
     parser.add_argument("--epsilons", nargs="*", type=float,
                         default=[0.0, 0.01, 0.02, 0.05],

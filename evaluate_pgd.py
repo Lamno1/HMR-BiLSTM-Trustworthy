@@ -43,7 +43,7 @@ from evaluate_fgsm import load_baseline_model, build_test_loader, CLASS_NAMES, C
 
 def pgd_attack(model, x, y, epsilon, alpha, steps, criterion, random_start=True, data_min=None, data_max=None):
     x_adv = x.clone().detach()
-    
+
     if data_min is None: data_min = x.min()
     if data_max is None: data_max = x.max()
 
@@ -51,6 +51,9 @@ def pgd_attack(model, x, y, epsilon, alpha, steps, criterion, random_start=True,
         delta_init = torch.zeros_like(x).uniform_(-epsilon, epsilon)
         x_adv = (x + delta_init).clamp(data_min, data_max).detach()
 
+    # cuDNN RNN (LSTM/BiLSTM) requires train mode for backward pass
+    was_training = model.training
+    model.train()
     for _ in range(steps):
         x_adv.requires_grad_(True)
         outputs = model(x_adv)
@@ -62,6 +65,7 @@ def pgd_attack(model, x, y, epsilon, alpha, steps, criterion, random_start=True,
             x_adv = x_adv + alpha * x_adv.grad.sign()
             delta = torch.clamp(x_adv - x, min=-epsilon, max=epsilon)
             x_adv = (x + delta).clamp(data_min, data_max).detach()
+    model.train(was_training)  # restore eval mode
 
     return x_adv, (x_adv - x).detach()
 

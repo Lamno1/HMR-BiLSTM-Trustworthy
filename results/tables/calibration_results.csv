@@ -1,4 +1,4 @@
-Rank,Model,ECE (lower=better),Brier Score (lower=better),ECE Interpretation,Brier Interpretation
-1,BiLSTM,0.1672,0.5597,Poor (>=0.10),Poor (>=0.20)
-2,HMR-BiLSTM,0.2309,0.6054,Poor (>=0.10),Poor (>=0.20)
-3,LSTM,0.3146,0.7622,Poor (>=0.10),Poor (>=0.20)
+Rank,Model,ECE_uncalibrated,ECE_calibrated (HMR-BiLSTM only),MCE_uncalibrated,MCE_calibrated (HMR-BiLSTM only),NLL_uncalibrated,NLL_calibrated (HMR-BiLSTM only),Brier Score,Brier Score_calibrated (HMR-BiLSTM only),ECE Interpretation,Brier Interpretation
+1,HMR-BiLSTM,0.0380,0.0277,0.4344,0.6805,0.2162,0.2095,0.1075,0.1057,Good (0.02-0.05),Fair (0.10-0.20)
+2,LSTM,0.0779,N/A,0.2382,N/A,0.4594,N/A,0.2461,N/A,Fair (0.05-0.10),Poor (>=0.20)
+3,BiLSTM,0.1078,N/A,0.3259,N/A,0.6311,N/A,0.2581,N/A,Poor (>=0.10),Poor (>=0.20)

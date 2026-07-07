@@ -1,4 +1,5 @@
 import argparse
+import json
 import numpy as np
 import torch
 import torch.nn.functional as F
@@ -66,6 +67,54 @@ def calculate_ece(probs, labels, num_bins=15):
             })
     
     return ece, bin_stats
+
+def calculate_mce(probs, labels, num_bins=15):
+    """Maximum Calibration Error: worst-case |confidence - accuracy| over bins
+    (same binning as calculate_ece, but max instead of the sample-weighted mean)."""
+    bin_boundaries = np.linspace(0, 1, num_bins + 1)
+    bin_lowers = bin_boundaries[:-1]
+    bin_uppers = bin_boundaries[1:]
+
+    confidences = np.max(probs, axis=1)
+    predictions = np.argmax(probs, axis=1)
+    accuracies = predictions == labels
+
+    mce = 0.0
+    for bin_lower, bin_upper in zip(bin_lowers, bin_uppers):
+        in_bin = (confidences > bin_lower) & (confidences <= bin_upper)
+        if bin_lower == 0.0:
+            in_bin = in_bin | (confidences == 0.0)
+        if in_bin.sum() > 0:
+            gap = np.abs(confidences[in_bin].mean() - accuracies[in_bin].mean())
+            mce = max(mce, gap)
+    return float(mce)
+
+
+def calculate_nll(probs, labels, eps=1e-12):
+    """Mean negative log-likelihood assigned to the true class."""
+    true_class_probs = probs[np.arange(len(labels)), labels]
+    return float(-np.mean(np.log(np.clip(true_class_probs, eps, 1.0))))
+
+
+def calculate_conditional_ece(probs, labels, class_indices=(0, 1, 2, 3), num_bins=15):
+    """
+    Per-class (conditional) ECE: restrict to samples whose TRUE label is c,
+    then compute standard ECE (confidence vs. accuracy) within that subset.
+    Answers "is the model's confidence well-calibrated specifically on real
+    class-c beats?" — matches the AAMI 4-class convention (N/S/V/F, Q excluded)
+    used everywhere else in this codebase.
+    """
+    result = {}
+    for c in class_indices:
+        mask = labels == c
+        n = int(mask.sum())
+        if n == 0:
+            result[str(c)] = {"ece": None, "n_samples": 0}
+            continue
+        ece_c, _ = calculate_ece(probs[mask], labels[mask], num_bins=num_bins)
+        result[str(c)] = {"ece": float(ece_c), "n_samples": n}
+    return result
+
 
 def get_model_predictions(model, dataloader, device):
     model.eval()
@@ -220,7 +269,7 @@ def main():
     models_info = {
         "LSTM": ("results/checkpoints/best_lstm.pt", "baseline"),
         "BiLSTM": ("results/checkpoints/best_bilstm.pt", "baseline"),
-        "HMR-BiLSTM": ("results/checkpoints/best_rlstm.pt", "rlstm"),
+        "HMR-BiLSTM": ("results/checkpoints/inter_best_rlstm.pt", "rlstm"),
     }
 
     results = {}
@@ -239,8 +288,14 @@ def main():
         probs, labels = get_model_predictions(model, test_loader, device)
 
         brier                    = calculate_brier_score(probs, labels)
+        mce_uncal                = calculate_mce(probs, labels, num_bins=num_bins)
+        nll_uncal                = calculate_nll(probs, labels)
         ece_uncal, bin_stats     = calculate_ece(probs, labels, num_bins=num_bins)
+        cond_ece_uncal           = calculate_conditional_ece(probs, labels, num_bins=num_bins)
+
         ece_cal, bin_stats_cal   = None, None
+        mce_cal, nll_cal, brier_cal = None, None, None
+        cond_ece_cal             = None
         optimal_temp             = None
 
         if m_type == "rlstm":
@@ -253,18 +308,31 @@ def main():
             with torch.no_grad():
                 cal_probs = torch.softmax(ts_model(logits), dim=1).cpu().numpy()
             ece_cal, bin_stats_cal = calculate_ece(cal_probs, labels, num_bins=num_bins)
+            mce_cal      = calculate_mce(cal_probs, labels, num_bins=num_bins)
+            nll_cal      = calculate_nll(cal_probs, labels)
+            brier_cal    = calculate_brier_score(cal_probs, labels)
+            cond_ece_cal = calculate_conditional_ece(cal_probs, labels, num_bins=num_bins)
 
         print(f"{model_name} Results:")
         print(f"  ECE (uncalibrated): {ece_uncal:.4f}")
         if ece_cal is not None:
             print(f"  ECE (calibrated,  T={optimal_temp:.4f}): {ece_cal:.4f}")
+        print(f"  MCE (uncalibrated): {mce_uncal:.4f}")
+        print(f"  NLL (uncalibrated): {nll_uncal:.4f}")
         print(f"  Brier Score: {brier:.4f}")
 
         results[model_name] = {
             'ece':            ece_uncal,
             'ece_calibrated': ece_cal,
+            'mce':            mce_uncal,
+            'mce_calibrated': mce_cal,
+            'nll':            nll_uncal,
+            'nll_calibrated': nll_cal,
             'temperature':    optimal_temp,
             'brier':          brier,
+            'brier_calibrated': brier_cal,
+            'conditional_ece':            cond_ece_uncal,
+            'conditional_ece_calibrated': cond_ece_cal,
             'bin_stats':      bin_stats,
         }
 
@@ -281,7 +349,10 @@ def main():
         writer.writerow([
             'Rank', 'Model',
             'ECE_uncalibrated', 'ECE_calibrated (HMR-BiLSTM only)',
-            'Brier Score', 'ECE Interpretation', 'Brier Interpretation'
+            'MCE_uncalibrated', 'MCE_calibrated (HMR-BiLSTM only)',
+            'NLL_uncalibrated', 'NLL_calibrated (HMR-BiLSTM only)',
+            'Brier Score', 'Brier Score_calibrated (HMR-BiLSTM only)',
+            'ECE Interpretation', 'Brier Interpretation'
         ])
         for rank, (model_name, stats) in enumerate(sorted_results, start=1):
             ece_interp   = 'Excellent (<0.02)' if stats['ece'] < 0.02 else (
@@ -290,14 +361,55 @@ def main():
             brier_interp = 'Excellent (<0.05)' if stats['brier'] < 0.05 else (
                            'Good (0.05-0.10)'  if stats['brier'] < 0.10 else (
                            'Fair (0.10-0.20)'  if stats['brier'] < 0.20 else 'Poor (>=0.20)'))
-            ece_cal_str = f"{stats['ece_calibrated']:.4f}" if stats.get('ece_calibrated') is not None else "N/A"
+            def _n(v):
+                return f"{v:.4f}" if v is not None else "N/A"
             writer.writerow([
                 rank, model_name,
-                f"{stats['ece']:.4f}", ece_cal_str,
-                f"{stats['brier']:.4f}",
+                f"{stats['ece']:.4f}", _n(stats.get('ece_calibrated')),
+                f"{stats['mce']:.4f}", _n(stats.get('mce_calibrated')),
+                f"{stats['nll']:.4f}", _n(stats.get('nll_calibrated')),
+                f"{stats['brier']:.4f}", _n(stats.get('brier_calibrated')),
                 ece_interp, brier_interp
             ])
     print(f"\n[OK] Saved calibration metrics -> {csv_path}")
+
+    # ── Save results.json into versioned outputs folder (for evaluate_trustworthiness.py) ──
+    try:
+        from configs.paths import get_run_id, build_paths, RLSTM_CKPT, get_checkpoint_hash
+        run_id    = get_run_id(cfg)
+        paths     = build_paths(run_id)
+        ckpt_hash = get_checkpoint_hash(RLSTM_CKPT)
+        paths["out_calib"].mkdir(parents=True, exist_ok=True)
+
+        hmr = results.get("HMR-BiLSTM", {})
+        # Structure must match what evaluate_trustworthiness.py reads:
+        # calib_res["metrics"]["ece_before"], ["ece_after"], ["brier_before"], etc.
+        calib_json = {
+            "checkpoint_hash": ckpt_hash,
+            "temperature":     hmr.get("temperature"),
+            "metrics": {
+                "ece_before":    hmr.get("ece"),
+                "ece_after":     hmr.get("ece_calibrated"),
+                "mce_before":    hmr.get("mce"),
+                "mce_after":     hmr.get("mce_calibrated"),
+                "nll_before":    hmr.get("nll"),
+                "nll_after":     hmr.get("nll_calibrated"),
+                "brier_before":  hmr.get("brier"),
+                "brier_after":   hmr.get("brier_calibrated"),
+                "conditional_ece_before": hmr.get("conditional_ece"),
+                "conditional_ece_after":  hmr.get("conditional_ece_calibrated") or {},
+            },
+            "all_models": {
+                name: {"ece": s.get("ece"), "ece_calibrated": s.get("ece_calibrated"), "brier": s.get("brier")}
+                for name, s in results.items()
+            },
+        }
+        json_out = paths["out_calib"] / "results.json"
+        with open(json_out, "w", encoding="utf-8") as f:
+            json.dump(calib_json, f, indent=2)
+        print(f"[OK] Saved calibration JSON  -> {json_out}")
+    except Exception as _e:
+        print(f"[WARN] Could not save calibration JSON: {_e}")
 
     # -- Interpretation Helper ------------------------------------------------
     print("\n" + "=" * 55)

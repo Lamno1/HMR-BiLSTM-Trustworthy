@@ -38,7 +38,7 @@ CONFIG = {
     "lambda_smooth":           0.003,
 
     "epochs":                  45,
-    "early_stopping_patience": 8,
+    "early_stopping_patience": 15,
     "grad_clip":               1.0,
     "num_classes":             5,
     "input_size":              1,
@@ -243,13 +243,16 @@ def main():
     test_loader  = DataLoader(test_ds,  batch_size=cfg["batch_size"], shuffle=False,
                               num_workers=0, pin_memory=False)
 
-    # ── Class weights ──
+    # ── Class weights (computed from inter_train to match inter-patient distribution) ──
     class_weights = None
     if cfg["use_class_weights"]:
-        cw_path = Path(cfg["data_dir"]) / "class_weights.npy"
-        if cw_path.exists():
-            class_weights = torch.from_numpy(np.load(cw_path)).float().to(device)
-            print(f"  Class weights: {class_weights.cpu().numpy()}")
+        y_inter_tr = train_ds.y.numpy()
+        counts = np.bincount(y_inter_tr, minlength=cfg["num_classes"]).astype(np.float64)
+        counts = np.where(counts == 0, 1e-9, counts)
+        cw_arr = counts.sum() / (float(cfg["num_classes"]) * counts)
+        cw_arr = np.clip(cw_arr, 0.5, 50.0).astype(np.float32)
+        class_weights = torch.from_numpy(cw_arr).float().to(device)
+        print(f"  Class weights (inter_train): {cw_arr}")
 
     # ── Model ──
     print("\n[Building HMR-BiLSTM]")

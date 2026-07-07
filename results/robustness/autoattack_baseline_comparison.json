@@ -1,0 +1,35 @@
+[
+  {
+    "model": "LSTM",
+    "n_subset": 71,
+    "clean_acc": 0.4648,
+    "clean_f1_macro": 0.32,
+    "pgd20_asr": 0.5915,
+    "pgd20_f1_macro": 0.25,
+    "autoattack_asr": 0.5915,
+    "autoattack_f1_macro": 0.2475,
+    "masking_gap_aa_minus_pgd": 0.0
+  },
+  {
+    "model": "BiLSTM",
+    "n_subset": 71,
+    "clean_acc": 0.4507,
+    "clean_f1_macro": 0.2876,
+    "pgd20_asr": 0.5915,
+    "pgd20_f1_macro": 0.2335,
+    "autoattack_asr": 0.5915,
+    "autoattack_f1_macro": 0.2335,
+    "masking_gap_aa_minus_pgd": 0.0
+  },
+  {
+    "model": "HMR-BiLSTM",
+    "n_subset": 71,
+    "clean_acc": 0.5775,
+    "clean_f1_macro": 0.464,
+    "pgd20_asr": 0.507,
+    "pgd20_f1_macro": 0.3913,
+    "autoattack_asr": 0.507,
+    "autoattack_f1_macro": 0.3913,
+    "masking_gap_aa_minus_pgd": 0.0
+  }
+]

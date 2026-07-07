@@ -26,6 +26,7 @@ Outputs:
     cw_asr_by_class.png
 """
 
+import sys
 import json
 import yaml
 import numpy as np
@@ -38,6 +39,11 @@ import matplotlib
 matplotlib.use("Agg")
 import matplotlib.pyplot as plt
 from sklearn.metrics import f1_score
+
+# Make the project root importable regardless of how this script is invoked.
+# `python robustness/cw_attack.py` only puts robustness/ on sys.path, not the
+# project root where `configs`/`report_results` live.
+sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
 from configs.paths import (
     get_run_id, build_paths, RLSTM_CKPT, get_checkpoint_hash, INTER_TEST
@@ -244,7 +250,9 @@ def main():
     data_max = float(X_test.max())
     print(f"  Data range: [{data_min:.3f}, {data_max:.3f}]")
 
-    # ── Stratified subset (only correctly classified samples) ──
+    # ── Stratified subset of the FULL test set (correct + incorrect predictions) ──
+    # Attacking only correctly-classified samples inflates clean_f1_macro to 1.0
+    # by construction and turns ASR into an upper bound rather than a real metric.
     print("Getting clean predictions...")
     all_preds = []
     with torch.no_grad():
@@ -253,13 +261,11 @@ def main():
             all_preds.append(model(b).argmax(-1).cpu().numpy())
     preds_clean = np.concatenate(all_preds)
 
-    correct_mask = preds_clean == y_test
-    X_correct = X_test[correct_mask]
-    y_correct = y_test[correct_mask]
     X_sub, y_sub, sub_idx = select_stratified_subset(
-        X_correct, y_correct, n_eval, rng
+        X_test, y_test, n_eval, rng
     )
-    print(f"  Attacking {len(X_sub)} correctly classified samples (stratified)")
+    preds_clean_sub = preds_clean[sub_idx]
+    print(f"  Attacking {len(X_sub)} samples (stratified, unfiltered by correctness)")
 
     # ── Run C&W attack in batches ──
     print(f"Running C&W attack (c={cw_c}, steps={cw_steps})...")
@@ -309,8 +315,7 @@ def main():
 
     # Adversarial F1
     adv_f1 = f1_score(y_sub, adv_preds, average="macro", zero_division=0)
-    clean_f1 = f1_score(y_sub, preds_clean[correct_mask][sub_idx],
-                        average="macro", zero_division=0)
+    clean_f1 = f1_score(y_sub, preds_clean_sub, average="macro", zero_division=0)
     print(f"  Clean Macro F1: {clean_f1:.4f}  →  Adv Macro F1: {adv_f1:.4f}")
 
     # ── Plots ──
@@ -335,7 +340,9 @@ def main():
             "n_eval":     n_eval,
             "batch_size": batch_sz,
             "data_range": [round(data_min, 4), round(data_max, 4)],
-            "note":       "Only correctly-classified samples attacked (upper bound ASR)",
+            "note":       "Stratified subsample of the full test set (correct + incorrect "
+                          "clean predictions); ASR and F1-drop reflect true robustness, "
+                          "not an upper bound.",
         },
         "metrics": {
             "asr_total":       round(asr_total, 4),

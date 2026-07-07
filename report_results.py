@@ -186,16 +186,16 @@ def plot_gate_trajectories(r_all, y_all, save_path):
 
 def plot_comparison_bars(all_results, save_path):
     """Bar chart so sánh tất cả mô hình."""
-    model_order = ["logistic_regression", "decision_tree", "lstm", "bilstm", "hmr_bilstm"]
-    model_labels = ["LR", "DT", "LSTM", "BiLSTM", "HMR-BiLSTM"]
+    model_order = ["logistic_regression", "decision_tree", "lstm", "bilstm", "resnet1d", "hmr_bilstm"]
+    model_labels = ["LR", "DT", "LSTM", "BiLSTM", "ResNet1D", "HMR-BiLSTM"]
     metrics = ["accuracy", "precision_macro", "recall_macro", "f1_macro", "auc_ovr"]
     metric_labels = ["Accuracy", "Prec(macro)", "Rec(macro)", "F1(macro)", "AUC(OvR)"]
 
     fig, ax = plt.subplots(figsize=(12, 5))
     x = np.arange(len(metrics))
-    width = 0.15
+    width = 0.13
 
-    colors = ["#9E9E9E", "#FFA726", "#42A5F5", "#5C6BC0", "#43A047"]
+    colors = ["#9E9E9E", "#FFA726", "#42A5F5", "#5C6BC0", "#8D6E63", "#43A047"]
     for i, (m, label) in enumerate(zip(model_order, model_labels)):
         if m not in all_results:
             continue
@@ -205,7 +205,7 @@ def plot_comparison_bars(all_results, save_path):
             ax.text(bar.get_x() + bar.get_width()/2, bar.get_height() + 0.005,
                     f"{v:.3f}", ha="center", va="bottom", fontsize=7, rotation=0)
 
-    ax.set_xticks(x + width * 2)
+    ax.set_xticks(x + width * 2.5)
     ax.set_xticklabels(metric_labels, fontsize=10)
     ax.set_ylabel("Score", fontsize=12)
     ax.set_title("Model Comparison on MIT-BIH ECG Test Set", fontsize=13)
@@ -220,15 +220,16 @@ def plot_comparison_bars(all_results, save_path):
 
 def plot_results_table(all_results, save_path):
     """Xuất bảng kết quả ra file ảnh."""
-    model_order = ["logistic_regression", "decision_tree", "lstm", "bilstm", "hmr_bilstm"]
+    model_order = ["logistic_regression", "decision_tree", "lstm", "bilstm", "resnet1d", "hmr_bilstm"]
     pretty = {
         "logistic_regression": "Logistic Regression",
         "decision_tree": "Decision Tree",
         "lstm": "LSTM",
         "bilstm": "BiLSTM",
+        "resnet1d": "ResNet1D",
         "hmr_bilstm": "HMR-BiLSTM",
     }
-    
+
     cell_text = []
     row_labels = []
     
@@ -302,14 +303,23 @@ def main():
         with open(baseline_file) as f:
             all_results = json.load(f)
 
+    # roc_auc_score (unlike precision/recall/f1_score) raises instead of ignoring
+    # samples outside `labels` when y_true contains a class not in `labels` --
+    # filter Q out locally just for this call so the AAMI 4-class AUC still
+    # works while accuracy/figures above keep using the full 5-class y_test.
+    mask4 = y_test < 4
+    auc_ovr = roc_auc_score(
+        y_test[mask4], probs[mask4][:, :4] / probs[mask4][:, :4].sum(axis=1, keepdims=True),
+        multi_class="ovr", average="macro", labels=[0, 1, 2, 3],
+    )
+
     all_results["hmr_bilstm"] = {
         "accuracy":         accuracy_score(y_test, preds),
         "precision_macro":  precision_score(y_test, preds, labels=[0, 1, 2, 3], average="macro", zero_division=0),
         "recall_macro":     recall_score(y_test, preds, labels=[0, 1, 2, 3], average="macro", zero_division=0),
         "f1_macro":         f1_score(y_test, preds, labels=[0, 1, 2, 3], average="macro", zero_division=0),
         "f1_weighted":      f1_score(y_test, preds, labels=[0, 1, 2, 3], average="weighted", zero_division=0),
-        "auc_ovr":          roc_auc_score(y_test, probs[:, :4] / probs[:, :4].sum(axis=1, keepdims=True),
-                                          multi_class="ovr", average="macro", labels=[0, 1, 2, 3]),
+        "auc_ovr":          auc_ovr,
     }
 
     plot_comparison_bars(all_results, fig_dir / "comparison_bars.png")
@@ -320,12 +330,13 @@ def main():
     print("=" * 80)
     print(f"{'Model':<22} {'Acc':>8} {'P_mac':>8} {'R_mac':>8} {'F1_mac':>8} {'F1_w':>8} {'AUC':>8}")
     print("-" * 80)
-    order = ["logistic_regression", "decision_tree", "lstm", "bilstm", "hmr_bilstm"]
+    order = ["logistic_regression", "decision_tree", "lstm", "bilstm", "resnet1d", "hmr_bilstm"]
     pretty = {
         "logistic_regression": "Logistic Regression",
         "decision_tree": "Decision Tree",
         "lstm": "LSTM",
         "bilstm": "BiLSTM",
+        "resnet1d": "ResNet1D",
         "hmr_bilstm": "HMR-BiLSTM",
     }
     for name in order:

@@ -27,6 +27,7 @@ Outputs:
     autoattack_comparison.png   ← PGD vs AutoAttack ASR comparison
 """
 
+import sys
 import json
 import yaml
 import numpy as np
@@ -39,6 +40,13 @@ import matplotlib
 matplotlib.use("Agg")
 import matplotlib.pyplot as plt
 from sklearn.metrics import f1_score, accuracy_score
+
+# Make the project root importable regardless of how this script is invoked.
+# `python robustness/auto_attack.py` only puts robustness/ on sys.path, not the
+# project root where `configs`/`report_results` live -- `python -m
+# robustness.auto_attack` works without this, but plain script invocation
+# (which is what most people naturally try) does not.
+sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
 from configs.paths import (
     get_run_id, build_paths, RLSTM_CKPT, get_checkpoint_hash, INTER_TEST
@@ -120,9 +128,45 @@ def plot_attack_comparison(pgd_asr: float, cw_asr: float, aa_asr: float,
 
 # ── Quick PGD baseline (for comparison in same run) ──────────────────────────
 
+def enter_deterministic_rnn_train_mode(model):
+    """
+    cuDNN's fused LSTM/GRU kernels only support backward while the module's
+    `.training` flag is True, but naively calling model.train() also makes
+    Dropout/BatchNorm stochastic -- which can make AutoAttack flag the model
+    as "a randomized defense" (Dropout noise during the attack, not an actual
+    defense) and makes plain PGD non-reproducible run to run. We instead:
+    (1) put the whole model in train mode so cuDNN's RNN backward works,
+    (2) force every Dropout/BatchNorm submodule back to eval so their
+    behaviour stays deterministic, and (3) zero out any nn.LSTM/nn.GRU's own
+    inter-layer `dropout` attribute for the same reason (it has no separate
+    Module to .eval() -- it's a float checked inside the RNN's forward
+    whenever the module is in train mode).
+    Returns a restore() callback that undoes all three changes.
+    """
+    was_training = model.training
+    model.train()
+
+    for m in model.modules():
+        if isinstance(m, (nn.Dropout, nn.BatchNorm1d, nn.BatchNorm2d)):
+            m.eval()
+
+    zeroed_rnn_dropout = []
+    for m in model.modules():
+        if isinstance(m, (nn.LSTM, nn.GRU, nn.RNN)) and getattr(m, "dropout", 0) > 0:
+            zeroed_rnn_dropout.append((m, m.dropout))
+            m.dropout = 0.0
+
+    def restore():
+        for m, p in zeroed_rnn_dropout:
+            m.dropout = p
+        model.train(was_training)
+
+    return restore
+
+
 def pgd_attack(model, x, y, epsilon, alpha, steps, data_min, data_max, device):
     """PGD with global clamping — same protocol as evaluate_pgd.py."""
-    model.eval()
+    restore = enter_deterministic_rnn_train_mode(model)
     x_adv = x.clone().detach()
     # Random init
     x_adv = x_adv + torch.zeros_like(x_adv).uniform_(-epsilon, epsilon)
@@ -138,7 +182,8 @@ def pgd_attack(model, x, y, epsilon, alpha, steps, data_min, data_max, device):
             x_adv = x_adv + alpha * x_adv.grad.sign()
             delta = (x_adv - x).clamp(-epsilon, epsilon)
             x_adv = (x + delta).clamp(data_min, data_max).detach()
-    return x_adv
+    restore()
+    return x_adv.detach()
 
 
 # ── Main ──────────────────────────────────────────────────────────────────────
@@ -156,6 +201,9 @@ def main():
     aa_eps       = rob_cfg.get("autoattack_eps",  0.02)
     aa_norm      = rob_cfg.get("autoattack_norm", "Linf")
     pgd_eps      = rob_cfg.get("pgd_eps", 0.02)
+    if isinstance(pgd_eps, list):
+        # Config stores a sweep list; pick the scalar closest to aa_eps
+        pgd_eps = min(pgd_eps, key=lambda x: abs(x - aa_eps))
     assert abs(aa_eps - pgd_eps) < 1e-6, (
         f"AutoAttack eps ({aa_eps}) != PGD eps ({pgd_eps}): "
         "both must use the same normalised-input epsilon budget for comparable robustness figures."
@@ -186,7 +234,9 @@ def main():
     data_max = float(X_test.max())
     print(f"  Data range: [{data_min:.3f}, {data_max:.3f}]")
 
-    # ── Get clean predictions; keep only correctly classified ──
+    # ── Get clean predictions; stratified subset of the FULL test set ──
+    # (not filtered to correctly-classified-only — that would force clean F1
+    # to 1.0 by construction and turn ASR into an upper bound.)
     print("Getting clean predictions...")
     all_preds = []
     with torch.no_grad():
@@ -195,15 +245,12 @@ def main():
             all_preds.append(model(b).argmax(-1).cpu().numpy())
     preds_clean = np.concatenate(all_preds)
 
-    correct_mask = preds_clean == y_test
-    X_correct    = X_test[correct_mask]
-    y_correct    = y_test[correct_mask]
-    X_sub, y_sub, sub_idx = select_stratified_subset(X_correct, y_correct, n_eval, rng)
-    print(f"  Subset: {len(X_sub)} correctly classified samples (stratified)")
+    X_sub, y_sub, sub_idx = select_stratified_subset(X_test, y_test, n_eval, rng)
+    preds_clean_sub = preds_clean[sub_idx]
+    print(f"  Subset: {len(X_sub)} samples (stratified, unfiltered by correctness)")
 
-    clean_acc = accuracy_score(y_sub, preds_clean[correct_mask][sub_idx])
-    clean_f1  = f1_score(y_sub, preds_clean[correct_mask][sub_idx],
-                          average="macro", zero_division=0)
+    clean_acc = accuracy_score(y_sub, preds_clean_sub)
+    clean_f1  = f1_score(y_sub, preds_clean_sub, average="macro", zero_division=0)
 
     # ── PGD-20 baseline (for comparison) ──
     print("Running PGD-20 baseline...")
@@ -261,19 +308,26 @@ def main():
     aa_wrapper.eval()
 
     try:
-        from autoattack import AutoAttack
+        from pyautoattack import AutoAttack
         adversary = AutoAttack(
             aa_wrapper, norm=aa_norm, eps=aa_eps / (data_max - data_min),
-            version="standard", device=device, verbose=True
+            version="standard", device=device
         )
         # Limit target classes to avoid IndexError on 5-class dataset
         adversary.apgd_targeted.n_target_classes = 4
         adversary.fab.n_target_classes = 4
 
         # AutoAttack returns perturbed x_adv in [0,1], (N, 1, T)
-        x_adv_aa = adversary.run_standard_evaluation(
-            x_aa_tensor, y_aa_tensor, bs=32
+        # pyautoattack's run_standard_evaluation() takes `batch_size`, not `bs`
+        # (the old `autoattack` package's kwarg name -- API changed with the
+        # package rename, see requirements.txt).
+        result = adversary.run_standard_evaluation(
+            x_aa_tensor, y_aa_tensor, batch_size=32
         )
+        # Installed pyautoattack's run_standard_evaluation() returns (x_adv, y_adv);
+        # kept the isinstance check for compatibility with versions that return
+        # just x_adv. Either way we only need the perturbed inputs here.
+        x_adv_aa = result[0] if isinstance(result, tuple) else result
         aa_available = True
     except ImportError:
         print("  [!] autoattack package not installed. Using APGD approximation.")

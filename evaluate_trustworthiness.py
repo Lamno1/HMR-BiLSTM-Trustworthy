@@ -385,8 +385,8 @@ def main():
     print(f"  {'PGD (eps=0.02)':<22} {'Full Test':<18} {fmt(clean_pgd_f1):>10} {fmt(pgd_f1):>12} {fmt(clean_pgd_f1 - pgd_f1 if clean_pgd_f1 is not None and pgd_f1 is not None else None):>10}")
     print(f"  {'CW (L2)':<22} {'Subset (n=200)':<18} {fmt(clean_cw_f1):>10} {fmt(cw_f1):>12} {fmt(clean_cw_f1 - cw_f1 if clean_cw_f1 is not None and cw_f1 is not None else None):>10}")
     print(f"  {'AutoAttack (eps=0.02)':<22} {'Subset (n=200)':<18} {fmt(clean_aa_f1):>10} {fmt(aa_f1):>12} {fmt(clean_aa_f1 - aa_f1 if clean_aa_f1 is not None and aa_f1 is not None else None):>10}")
-    print("  [Note] FGSM/PGD are evaluated on Full Test (4-class clean F1 = 0.5644).")
-    print("         CW/AutoAttack are evaluated on correctly-classified subsets (clean F1 = 1.0000).")
+    print("  [Note] FGSM/PGD are evaluated on the full inter-patient test set.")
+    print("         CW/AutoAttack are evaluated on a stratified subset (n=200), unfiltered by correctness.")
     if aa_res and aa_res.get("metrics", {}).get("_note"):
         print(f"  [NOTE] {aa_res['metrics']['_note']}")
     if aa_res and "metrics" in aa_res:

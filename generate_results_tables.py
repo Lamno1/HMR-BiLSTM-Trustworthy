@@ -65,23 +65,51 @@ if baseline_file.exists():
 else:
     print("Warning: results/logs/baseline_results.json not found! CLEAN dictionary will be empty.")
 
+def _fgsm_from_eps_list(eps_list):
+    """Extract clean (eps=0) and adv (eps=0.02) metrics from a per-epsilon list."""
+    e0  = next((r for r in eps_list if r.get("epsilon", -1) == 0.0), None)
+    e02 = next((r for r in eps_list if abs(r.get("epsilon", -1) - 0.02) < 1e-6), None)
+    if not (e0 and e02):
+        return None
+    return dict(
+        clean_f1=safe_float(e0["macro_f1"]),   adv_f1=safe_float(e02["macro_f1"]),
+        asr=safe_float(e02["attack_success_rate"]),
+        rec_s_c=safe_float(e0["recall_clean_S"]),  rec_s_a=safe_float(e02["recall_adv_S"]),
+        rec_v_c=safe_float(e0["recall_clean_V"]),  rec_v_a=safe_float(e02["recall_adv_V"]),
+        rec_f_c=safe_float(e0["recall_clean_F"]),  rec_f_a=safe_float(e02["recall_adv_F"]),
+    )
+
 FGSM = {}
 if (TABLES_DIR / "fgsm_baseline_summary.csv").exists():
     df_fgsm = pd.read_csv(TABLES_DIR / "fgsm_baseline_summary.csv")
     for _, row in df_fgsm.iterrows():
-        # Columns: model,clean_f1,fgsm_f1,asr,recall_clean_S,recall_adv_S,recall_clean_V,recall_adv_V,recall_clean_F,recall_adv_F
         FGSM[row["model"]] = dict(
             clean_f1=safe_float(row["clean_f1"]), adv_f1=safe_float(row["fgsm_f1"]), asr=safe_float(row["asr"]),
             rec_s_c=safe_float(row["recall_clean_S"]), rec_s_a=safe_float(row["recall_adv_S"]),
             rec_v_c=safe_float(row["recall_clean_V"]), rec_v_a=safe_float(row["recall_adv_V"]),
             rec_f_c=safe_float(row["recall_clean_F"]), rec_f_a=safe_float(row["recall_adv_F"])
         )
+elif Path("results/logs/fgsm_comparison_results.json").exists():
+    with open("results/logs/fgsm_comparison_results.json") as _f:
+        _fgsm_cmp = json.load(_f)
+    _name_map = {"HMR-BiLSTM": "HMR-BiLSTM", "LSTM": "LSTM", "BiLSTM": "BiLSTM"}
+    for _raw_name, _eps_list in _fgsm_cmp.items():
+        _name = _name_map.get(_raw_name, _raw_name)
+        _entry = _fgsm_from_eps_list(_eps_list)
+        if _entry:
+            FGSM[_name] = _entry
+elif Path("results/logs/fgsm_results.json").exists():
+    with open("results/logs/fgsm_results.json") as _f:
+        _fgsm_list = json.load(_f)
+    _entry = _fgsm_from_eps_list(_fgsm_list)
+    if _entry:
+        FGSM["HMR-BiLSTM"] = _entry
 
 CALIB = {}
 if (TABLES_DIR / "calibration_results.csv").exists():
     df_calib = pd.read_csv(TABLES_DIR / "calibration_results.csv")
     for _, row in df_calib.iterrows():
-        CALIB[row["Model"]] = dict(ece=safe_float(row["ECE (lower=better)"]), brier=safe_float(row["Brier Score (lower=better)"]))
+        CALIB[row["Model"]] = dict(ece=safe_float(row["ECE_uncalibrated"]), brier=safe_float(row["Brier Score"]))
 
 PGD = {}
 if (TABLES_DIR / "pgd_baseline_comparison.csv").exists():
@@ -355,6 +383,24 @@ W = 0.55
 
 
 def make_summary_figure():
+    # Only plot models that have data in ALL required dicts
+    available_models = [
+        m for m in MODELS
+        if m in CLEAN and m in FGSM and m in PGD and m in CALIB
+    ]
+    if not available_models:
+        print("[SKIP] make_summary_figure: no model has complete data in CLEAN/FGSM/PGD/CALIB. "
+              "Run evaluate_fgsm.py --compare and evaluate_pgd.py first.")
+        return
+    if len(available_models) < len(MODELS):
+        missing = [m for m in MODELS if m not in available_models]
+        print(f"[WARN] make_summary_figure: skipping {missing} — data missing. "
+              f"Plotting with: {available_models}")
+
+    plot_models = available_models
+    plot_X = np.arange(len(plot_models))
+    plot_W = W
+
     fig = plt.figure(figsize=(18, 6))
     fig.patch.set_facecolor("#0f1117")
 
@@ -374,16 +420,16 @@ def make_summary_figure():
         for sp in ax.spines.values(): sp.set_color("#333344")
         ax.yaxis.grid(True, color="#2a2d3a", linewidth=0.8, zorder=0)
         ax.set_axisbelow(True)
-        ax.set_xticks(X)
-        ax.set_xticklabels(MODELS, color="#cccccc", fontsize=9)
+        ax.set_xticks(plot_X)
+        ax.set_xticklabels(plot_models, color="#cccccc", fontsize=9)
 
     # ── Panel A: Clean Performance ─────────────────────────────────────────────
-    f1_clean  = [CLEAN[m]["f1"]  for m in MODELS]
-    auc_clean = [CLEAN[m]["auc"] for m in MODELS]
-    bars = ax1.bar(X - W/4, f1_clean,  width=W/2, label="F1-macro", zorder=3,
-                   color=[COLORS[m] for m in MODELS], alpha=0.9)
-    bars2= ax1.bar(X + W/4, auc_clean, width=W/2, label="AUC-OvR", zorder=3,
-                   color=[COLORS[m] for m in MODELS], alpha=0.55, hatch="//")
+    f1_clean  = [CLEAN[m]["f1"]  for m in plot_models]
+    auc_clean = [CLEAN[m]["auc"] for m in plot_models]
+    bars = ax1.bar(plot_X - plot_W/4, f1_clean,  width=plot_W/2, label="F1-macro", zorder=3,
+                   color=[COLORS[m] for m in plot_models], alpha=0.9)
+    bars2= ax1.bar(plot_X + plot_W/4, auc_clean, width=plot_W/2, label="AUC-OvR", zorder=3,
+                   color=[COLORS[m] for m in plot_models], alpha=0.55, hatch="//")
     for bar, v in zip(bars,  f1_clean):
         ax1.text(bar.get_x()+bar.get_width()/2, v+0.003, f"{v:.3f}",
                  ha="center", va="bottom", fontsize=7.5, color="white", fontweight="bold")
@@ -396,13 +442,13 @@ def make_summary_figure():
 
     # ── Panel B: FGSM vs PGD Robustness ────────────────────────────────────────
     from matplotlib.patches import Patch
-    fgsm_f1 = [FGSM[m]["adv_f1"] for m in MODELS]
-    pgd_f1  = [PGD[m]["adv_f1"]  for m in MODELS]
-    bw = W / 2.2
-    bars_fgsm = ax2.bar(X - bw/2, fgsm_f1, width=bw, zorder=3,
-                        color=[COLORS[m] for m in MODELS], alpha=0.9)
-    bars_pgd  = ax2.bar(X + bw/2, pgd_f1,  width=bw, zorder=3,
-                        color=[COLORS[m] for m in MODELS], alpha=0.55, hatch="//")
+    fgsm_f1 = [FGSM[m]["adv_f1"] for m in plot_models]
+    pgd_f1  = [PGD[m]["adv_f1"]  for m in plot_models]
+    bw = plot_W / 2.2
+    bars_fgsm = ax2.bar(plot_X - bw/2, fgsm_f1, width=bw, zorder=3,
+                        color=[COLORS[m] for m in plot_models], alpha=0.9)
+    bars_pgd  = ax2.bar(plot_X + bw/2, pgd_f1,  width=bw, zorder=3,
+                        color=[COLORS[m] for m in plot_models], alpha=0.55, hatch="//")
     for bar, v in zip(bars_fgsm, fgsm_f1):
         ax2.text(bar.get_x()+bar.get_width()/2, v+0.003, f"{v:.3f}",
                  ha="center", va="bottom", fontsize=7, color="white", fontweight="bold")
@@ -417,12 +463,12 @@ def make_summary_figure():
     ], fontsize=8, framealpha=0.2, labelcolor="white")
 
     # ── Panel C: Calibration ───────────────────────────────────────────────────
-    eces   = [CALIB[m]["ece"]   for m in MODELS]
-    briers = [CALIB[m]["brier"] for m in MODELS]
-    bars4 = ax3.bar(X - W/4, eces,   width=W/2, label="ECE",         zorder=3,
-                    color=[COLORS[m] for m in MODELS], alpha=0.9)
-    bars5 = ax3.bar(X + W/4, briers, width=W/2, label="Brier Score", zorder=3,
-                    color=[COLORS[m] for m in MODELS], alpha=0.55, hatch="//")
+    eces   = [CALIB[m]["ece"]   for m in plot_models]
+    briers = [CALIB[m]["brier"] for m in plot_models]
+    bars4 = ax3.bar(plot_X - plot_W/4, eces,   width=plot_W/2, label="ECE",         zorder=3,
+                    color=[COLORS[m] for m in plot_models], alpha=0.9)
+    bars5 = ax3.bar(plot_X + plot_W/4, briers, width=plot_W/2, label="Brier Score", zorder=3,
+                    color=[COLORS[m] for m in plot_models], alpha=0.55, hatch="//")
     for bar, v in zip(bars4, eces):
         ax3.text(bar.get_x()+bar.get_width()/2, v+0.001, f"{v:.4f}",
                  ha="center", va="bottom", fontsize=7.5, color="white", fontweight="bold")

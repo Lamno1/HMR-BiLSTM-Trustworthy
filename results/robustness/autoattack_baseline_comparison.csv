@@ -1,0 +1,4 @@
+model,n_subset,clean_acc,clean_f1_macro,pgd20_asr,pgd20_f1_macro,autoattack_asr,autoattack_f1_macro,masking_gap_aa_minus_pgd
+LSTM,71,0.4648,0.32,0.5915,0.25,0.5915,0.2475,0.0
+BiLSTM,71,0.4507,0.2876,0.5915,0.2335,0.5915,0.2335,0.0
+HMR-BiLSTM,71,0.5775,0.464,0.507,0.3913,0.507,0.3913,0.0

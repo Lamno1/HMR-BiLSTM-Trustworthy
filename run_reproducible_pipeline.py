@@ -61,8 +61,8 @@ PIPELINE_STEPS = [
     },
     {
         "step": 9,
-        "name": "Ablation Variants Robustness",
-        "command": [sys.executable, "evaluate_ablation_robustness.py"],
+        "name": "AutoAttack Robustness Comparison (LSTM/BiLSTM/HMR-BiLSTM)",
+        "command": [sys.executable, "evaluate_autoattack_baselines.py"],
     },
     {
         "step": 10,
@@ -76,21 +76,11 @@ PIPELINE_STEPS = [
     },
     {
         "step": 12,
-        "name": "Combine Ablation Tables",
-        "command": [sys.executable, "combine_ablation_tables.py"],
-    },
-    {
-        "step": 13,
         "name": "Generate Final Tables and Figures",
         "command": [sys.executable, "generate_results_tables.py"],
     },
     {
-        "step": 14,
-        "name": "Export Final Results",
-        "command": [sys.executable, "plot_and_export.py"],
-    },
-    {
-        "step": 15,
+        "step": 13,
         "name": "Execute Trustworthiness Evaluation Dashboard (T8)",
         "command": [sys.executable, "evaluate_trustworthiness.py"],
     }
