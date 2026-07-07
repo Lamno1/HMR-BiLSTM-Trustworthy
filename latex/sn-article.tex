@@ -1,4 +1,3 @@
-\PassOptionsToPackage{draft}{graphicx}  % draft: boxes instead of images -> faster compile
 \documentclass[pdflatex,sn-mathphys-num]{sn-jnl}
 
 \usepackage{graphicx}
@@ -8,6 +7,7 @@
 \usepackage{float}
 \usepackage{placeins}
 \usepackage{amssymb}
+\usepackage{microtype}   % better paragraph justification, fixes most Overfull \hbox warnings
 \AtBeginDocument{\raggedbottom}
 
 % Đồng bộ thụt đầu dòng và khoảng cách giữa các đoạn
@@ -130,7 +130,7 @@ We test adversarial robustness with FGSM, PGD-20 (20 iterations, $\alpha=0.005$,
 \caption{FGSM and PGD-20 robustness at $\varepsilon=0.02$ on the full DS2 test set.}
 \label{tab:robustness}
 \centering
-\begin{tabular}{@{}lcccccc@{}}
+\begin{tabular}{@{}lccccc@{}}
 \toprule
 \textbf{Model} & \textbf{F1 clean} & \textbf{F1 FGSM} & \textbf{FGSM ASR} & \textbf{F1 PGD-20} & \textbf{PGD ASR} \\
 \midrule
@@ -279,7 +279,7 @@ Under a strict inter-patient protocol, HMR-BiLSTM improves macro F1 by 19.1 pp a
 This research is funded by the University of Economics Ho Chi Minh City, Vietnam (UEH).
 
 \section*{Data Availability}
-The ECG datasets used in this study are publicly available from the MIT-BIH Arrhythmia Database (PhysioNet). The implementation code, experimental configurations, and evaluation results are available at: \url{https://github.com/tn1-ai/HMR-BILSTM}
+The ECG datasets used in this study are publicly available from the MIT-BIH Arrhythmia Database (PhysioNet). The implementation code, experimental configurations, and evaluation results are available at: \url{https://github.com/Lamno1/HMR-BiLSTM-Trustworthy}
 
 
 \setlength{\bibsep}{0pt}
