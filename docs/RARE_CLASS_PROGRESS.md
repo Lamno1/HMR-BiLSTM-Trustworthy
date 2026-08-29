@@ -34,14 +34,29 @@ Last updated: **2026-08-29** (HD ladder step 2b `hier_ba` running; `hier` and `h
 
 ## 1. CURRENT STEP
 
-**LOPO sentinel `flat` baseline — RUNNING** (launched 2026-08-30 ~00:00,
-`results/logs/lopo_sentinel_flat.log`, PID 1123).
+**LOPO sentinel `flat` baseline — RUNNING** (`results/logs/lopo_sentinel_flat.log`,
+PID 1123, ~8 min/epoch, done ~08:45 2026-08-30).
 - `train_lopo_cv.py --mode sentinel --arch flat --epochs 25`
 - Establishes the reference F1-F/F1-S on the sentinel fold (test = 213-F, 232-S,
-  INCART I18/I74/I33/I62; 208 in train) AND benchmarks one-fold wall-time
-  (prints `[BENCHMARK]`) so the full 5-fold estimate is real.
-- Next: update `validation/preprocess_lopo.py` to carry V1, then build
-  HMR-MultiPath **rung 1** (V1 CNN branch + F-specialist head).
+  INCART I18/I74/I33/I62; 208 in train) + one-fold wall-time benchmark.
+
+**Everything for the MultiPath rungs is BUILT (2026-08-30, committed 2075adf):**
+- `hmr_multipath.py` — `HMRMultiPath` (flags: use_v1 / use_rhythm / use_grl;
+  all-off == plain 5-way head, 505k params) + `MultiPathLoss` (ce/balanced +
+  adversary CE + smoothness). Self-test passes rungs 0-3.
+- `train_multipath_lopo.py` — `--mode sentinel|kfold`, rung flags
+  `--v1 --rhythm --grl --loss balanced`. Shares fold/norm/sentinel/score with
+  `train_lopo_cv.py`. GRL λ ramp 0→0.2/10ep, FGSM on primary lead only, manual
+  SWA. Smoke-tested end-to-end on GPU.
+- `data/processed/lopo/pool.npz` **v2** — now carries `X2` (2nd lead: MIT-BIH
+  precordial (V1 ×38/44), INCART V1; both high-passed; 0% zero-filled).
+
+**Immediate run queue** (one GPU job at a time):
+1. sentinel `flat` (running) → flat reference + `[BENCHMARK]`
+2. `train_multipath_lopo.py --mode sentinel --v1 --epochs 25` → rung 1, compare
+   sentinel F1(213-F) vs flat
+3. rung 1 passes sentinel (F1-213-F ↑, S/N/V not down) → `--v1` full 5-fold LOPO
+   2-seed; then sentinel rung 2 (`--v1 --rhythm`); etc.
 
 ### Hierarchical head: CLOSED (2026-08-30)
 All three calibration variants failed on DS2 (vs official F .255 / S .397):
