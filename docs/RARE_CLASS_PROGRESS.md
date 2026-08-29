@@ -34,26 +34,24 @@ Last updated: **2026-08-29** (HD ladder step 2b `hier_ba` running; `hier` and `h
 
 ## 1. CURRENT STEP
 
-**HD ladder step 2b (`hier_ba`) — RUNNING** (launched 2026-08-29 ~21:40, `results/logs/hd_hier_ba.log`).
+**LOPO sentinel `flat` baseline — RUNNING** (launched 2026-08-30 ~00:00,
+`results/logs/lopo_sentinel_flat.log`, PID 1123).
+- `train_lopo_cv.py --mode sentinel --arch flat --epochs 25`
+- Establishes the reference F1-F/F1-S on the sentinel fold (test = 213-F, 232-S,
+  INCART I18/I74/I33/I62; 208 in train) AND benchmarks one-fold wall-time
+  (prints `[BENCHMARK]`) so the full 5-fold estimate is real.
+- Next: update `validation/preprocess_lopo.py` to carry V1, then build
+  HMR-MultiPath **rung 1** (V1 CNN branch + F-specialist head).
 
-- Script: `train_hd_ladder.py --variant hier_ba --seeds 42 123`
-- Loss = `HDLossBalanced`: prior-correct **BOTH** hierarchy levels via separate
-  heads — `BCE(abn_logit, y!=0, pos_weight = n_N/n_abn ≈ 8.4)` +
-  `CE(sub_logits + log π_sub, y-1)` on abnormal samples only + smoothness.
-  (Rationale: `hier` double-corrected; `hier_la` left the abn head with no
-  imbalance handling → abnormal underpredicted → F collapsed to 0.019.)
-- Data: `data/processed/splits/` (official plain split — the head + loss is the
-  only variable).
-- Question: does correcting each level with its own natural prior finally let the
-  hierarchical head beat the flat softmax on S/F?
-- Read: `python train_hd_ladder.py --variant hier_ba --seeds 42 123 --summarize-only`
+### Hierarchical head: CLOSED (2026-08-30)
+All three calibration variants failed on DS2 (vs official F .255 / S .397):
+`hier` F .173 / S .261 · `hier_la` F .019 · `hier_ba` F .097 / S .218. The
+decision head alone is not a big enough lever. Per the locked plan the binary
+abnormal gate does NOT go into HMR-MultiPath; rung-4 calibration is
+balanced-softmax/logit-adjust on the flat 5-way head, decided on its own merits.
+`hmr_hd.py` / `train_hd_ladder.py` kept as evidence.
 
-**Decision rule for the hierarchical head**: `hier_ba` is its last calibration
-variant. If it also fails to lift S/F mean → the hierarchical head is dead, move
-to step 3 (dual-lead V1) on the FLAT model, or step 4 (GRL de-confound), or pivot
-to DSTA. If it works → **re-confirm on 3 seeds (42/123/456) + SWA** before keeping.
-
-### Also being built now (no GPU needed): the LOPO / grouped-K-fold harness
+### The LOPO / grouped-K-fold harness (built 2026-08-29)
 Per the external review (2026-08-29): the biggest gap is *evaluation*, not
 architecture — the fixed DS1/DS2 F1-F/F1-S can never become "stable" because
 test-F is one patient. Build the record-level CV harness BEFORE combining
@@ -161,7 +159,8 @@ Status: ✅ kept / ❌ rejected / 🔄 running / ⏸ built-not-run
 | 08-29 | **Cross-DB Stage A, v2** (fixed) | + 0.5 Hz Butterworth HP on INCART, per-source z-score, DS2 re-extracted (=byte-identical to paper), official recipe imported. 3 seeds. | macro .582±.031 (=off .584); **S .174±.002 — variance killed but mean COLLAPSED .33→.17**; **F .311±.106 — mean up +.13 but spread .259 not reduced**; best_ep still 5/14/5 | ❌ **Pooling rejected.** INCART S = different domain. Val-blindness hypothesis (tier 1b) largely disproven. F-mean lever noted for a later Stage-B oversample. |
 | 08-29 | **HD ladder step 1 (`hier`)** | flat softmax → soft hierarchical head; loss kept = focal γ1.5 + class weights. 2 seeds (42,123). | macro .560 vs off .621; **S .261 vs .397; F .173 vs .255** — worse across the board | ❌ **Rejected.** Hierarchical head + big class weights + focal = double imbalance correction. |
 | 08-29 | **HD ladder step 2 (`hier_la`)** | hier head + logit-adjust on [S,V,F,Q] sub-head only; focal OFF, weights OFF. seed 42 (killed 123 mid-run). | seed42: macro .496, S .129, **F .019** | ❌ **Rejected, worse.** Abn head had NO imbalance correction → abnormal underpredicted → F collapses. |
-| 08-29 | **HD ladder step 2b (`hier_ba`)** | `HDLossBalanced`: prior-correct BOTH levels — BCE(abn, pos_weight≈8.4) + logit-adj sub CE. 2 seeds. | — | 🔄 **RUNNING** — hierarchical head's last calibration attempt |
+| 08-30 | **HD ladder step 2b (`hier_ba`)** | `HDLossBalanced`: prior-correct BOTH levels — BCE(abn, pos_weight≈8.4) + logit-adj sub CE. 2 seeds. | macro .539 vs off .621; S .218 vs .397; **F .097 vs .255** (F stable spread .007 but collapsed) | ❌ **Rejected.** 3/3 calibration variants fail. **Hierarchical head is DEAD** — decision head alone is not a big enough lever. Do NOT put the binary abn gate in HMR-MultiPath. |
+| 08-30 | **LOPO sentinel `flat` baseline** | `train_lopo_cv.py --mode sentinel --arch flat --epochs 25` — reference + wall-time benchmark | — | 🔄 **RUNNING** |
 | 08-29 | **LOPO harness + sentinel fold** | `preprocess_lopo.py` + `train_lopo_cv.py` (`--mode kfold|sentinel`, per-fold norm, inner-val selection on {S,V,F}, SWA, by-DB). Protocol locked in `docs/LOPO_PROTOCOL.md`. | — | ✅ **built** (helper tests pass); needs 1-fold GPU smoke + wall-time benchmark |
 | — | HMR-MultiPath rung 0 (`flat` sentinel + LOPO) | plain trunk, reference distribution | — | ⏸ next after hier_ba |
 | — | HMR-MultiPath rung 1 (V1 + F-specialist) | attacks B4/B3 | — | ⏸ not built |
