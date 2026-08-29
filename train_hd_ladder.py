@@ -34,7 +34,7 @@ import torch
 from torch.utils.data import DataLoader
 from sklearn.metrics import accuracy_score, classification_report, f1_score
 
-from hmr_hd import RLSTMClassifierHD, HDLoss
+from hmr_hd import RLSTMClassifierHD, HDLoss, HDLossBalanced
 from train_inter_patient import CONFIG, ECGDataset, set_seed, cosine_lr, train_one_epoch, evaluate
 
 if sys.stdout.encoding and sys.stdout.encoding.lower() != "utf-8":
@@ -98,6 +98,12 @@ def train_one_seed(seed, variant, loaders, device, ckpt_dir):
         crit = HDLoss(lambda_smooth=cfg["lambda_smooth"], class_weights=None,
                       focal_gamma=0.0, logit_adjust=la).to(device)
         print(f"  variant=hier_la  sub log-prior [S,V,F,Q]={la.cpu().numpy().round(3)}")
+    elif variant == "hier_ba":
+        counts = np.bincount(ytr, minlength=5)
+        crit = HDLossBalanced(class_counts=counts, lambda_smooth=cfg["lambda_smooth"],
+                              tau_sub=1.0).to(device)
+        print(f"  variant=hier_ba  abn pos_weight={float(crit.abn_pos_weight):.2f}  "
+              f"sub log-prior [S,V,F,Q]={crit.sub_la.cpu().numpy().round(3)}")
     else:
         raise ValueError(variant)
 
@@ -178,7 +184,7 @@ def summarize(out_dir, variant, seeds):
 
 def main():
     ap = argparse.ArgumentParser()
-    ap.add_argument("--variant", choices=["hier", "hier_la"], required=True)
+    ap.add_argument("--variant", choices=["hier", "hier_la", "hier_ba"], required=True)
     ap.add_argument("--seeds", nargs="*", type=int, default=[42, 123, 456])
     ap.add_argument("--out-dir", default="results/hd_ladder")
     ap.add_argument("--summarize-only", action="store_true")

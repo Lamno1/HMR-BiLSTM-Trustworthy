@@ -136,6 +136,65 @@ class HDLoss(nn.Module):
                        "total": total.detach()}
 
 
+class HDLossBalanced(nn.Module):
+    """Prior-corrected loss on BOTH hierarchy levels, via SEPARATE heads.
+
+    Step-1 (`hier`) failed: hierarchical head + focal + big 5-way class weights
+    double-corrected the imbalance. Step-2 (`hier_la`) failed worse: logit
+    adjustment on the [S,V,F,Q] sub-head only, with NO correction on the binary
+    abn head -> the abn head (abnormal ~10% of data) underpredicts "abnormal",
+    everything routes to N, F collapses to ~0.
+
+    Fix: correct each level with its own natural prior.
+      L_abn = BCEWithLogits(abn_logit, y!=0, pos_weight = n_N / n_abn)
+      L_sub = CE(sub_logits + tau * log prior_sub, y-1)  on abnormal samples only
+      L     = L_abn + L_sub + lambda_smooth * smoothness
+
+    Args come from the TRAIN label counts (bincount over 5 classes).
+    """
+
+    def __init__(self, class_counts, lambda_smooth: float = 0.003, tau_sub: float = 1.0):
+        super().__init__()
+        c = torch.as_tensor(class_counts, dtype=torch.float32).clamp_min(1.0)
+        n_norm, n_abn = c[0], c[1:].sum()
+        self.lambda_smooth = lambda_smooth
+        self.register_buffer("abn_pos_weight", (n_norm / n_abn).clone().detach())
+        prior_sub = (c[1:5] / c[1:5].sum())
+        self.register_buffer("sub_la", tau_sub * torch.log(prior_sub.clamp_min(1e-8)))
+
+    def forward(self, log_probs, targets, r_fwd=None, r_bwd=None):
+        # Everything is recoverable from the composed 5-way log-probs, so this
+        # stays compatible with train_inter_patient.train_one_epoch / fgsm.
+        log_p_norm = log_probs[:, 0]                                 # (B,)
+        log_p_abn = torch.logsumexp(log_probs[:, 1:], dim=1)         # (B,)
+        y_abn = (targets != 0).float()
+
+        # prior-corrected BCE on the N-vs-abnormal split (in log-prob space)
+        w = self.abn_pos_weight
+        l_abn = -(w * y_abn * log_p_abn + (1.0 - y_abn) * log_p_norm).mean()
+
+        # balanced-softmax on the [S,V,F,Q] sub-distribution, abnormal samples only
+        abn_mask = targets != 0
+        if abn_mask.any():
+            log_q = log_probs[abn_mask, 1:] - log_p_abn[abn_mask, None]   # (M,4) log-probs
+            log_q_adj = torch.log_softmax(log_q + self.sub_la, dim=1)
+            l_sub = -log_q_adj.gather(1, (targets[abn_mask] - 1)[:, None]).mean()
+        else:
+            l_sub = log_probs.sum() * 0.0
+
+        l_smooth = torch.zeros((), device=log_probs.device)
+        if r_fwd is not None:
+            l_smooth = l_smooth + temporal_smoothness_loss(r_fwd)
+        if r_bwd is not None:
+            l_smooth = l_smooth + temporal_smoothness_loss(r_bwd)
+        if r_fwd is not None and r_bwd is not None:
+            l_smooth = l_smooth / 2.0
+
+        total = l_abn + l_sub + self.lambda_smooth * l_smooth
+        return total, {"task": (l_abn + l_sub).detach(), "smooth": l_smooth.detach(),
+                       "abn": l_abn.detach(), "sub": l_sub.detach(), "total": total.detach()}
+
+
 if __name__ == "__main__":
     torch.manual_seed(0)
     B = 16
@@ -157,3 +216,10 @@ if __name__ == "__main__":
     loss2, _ = crit2(lp2, y, i2["r_fwd"], i2["r_bwd"])
     loss2.backward()
     print("logit-adjust loss", float(loss2), "OK")
+
+    crit3 = HDLossBalanced(class_counts=[37208, 836, 3196, 384, 8])
+    lp3, i3 = m(x, return_internals=True)
+    loss3, c3 = crit3(lp3, y, i3["r_fwd"], i3["r_bwd"])
+    loss3.backward()
+    print("balanced-both loss", float(loss3), "abn", float(c3["abn"]), "sub", float(c3["sub"]),
+          "pos_w", float(crit3.abn_pos_weight), "sub_la", crit3.sub_la.tolist())

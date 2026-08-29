@@ -6,7 +6,7 @@
 > Update the **CURRENT STEP** block and the **EXPERIMENT LOG** table after every run.
 > Source of truth for individual run numbers = the JSON files under `results/`.
 
-Last updated: **2026-08-29** (HD ladder step 2 running).
+Last updated: **2026-08-29** (HD ladder step 2b `hier_ba` running; `hier` and `hier_la` both rejected).
 
 ---
 
@@ -34,22 +34,45 @@ Last updated: **2026-08-29** (HD ladder step 2 running).
 
 ## 1. CURRENT STEP
 
-**HD ladder step 2 (`hier_la`) — RUNNING** (launched 2026-08-29 ~15:00, `results/logs/hd_hier_la.log`).
+**HD ladder step 2b (`hier_ba`) — RUNNING** (launched 2026-08-29 ~21:40, `results/logs/hd_hier_ba.log`).
 
-- Script: `train_hd_ladder.py --variant hier_la --seeds 42 123`
-- Change vs baseline: flat 5-way softmax → **soft hierarchical head**
-  (`hmr_hd.py`) + **balanced-softmax / logit-adjustment** on the [S,V,F,Q]
-  sub-head (focal OFF, class-weights OFF).
-- Data: `data/processed/splits/` (the official plain inter-patient split — single
-  variable = the head + loss).
-- Question: does a *principled* prior correction pair with the hierarchical head
-  better than the ad-hoc focal+weights (which failed, see step 1)?
-- Read when done: `python train_hd_ladder.py --variant hier_la --seeds 42 123 --summarize-only`
-- 2 seeds only (user: 2 seeds enough to conclude a step).
+- Script: `train_hd_ladder.py --variant hier_ba --seeds 42 123`
+- Loss = `HDLossBalanced`: prior-correct **BOTH** hierarchy levels via separate
+  heads — `BCE(abn_logit, y!=0, pos_weight = n_N/n_abn ≈ 8.4)` +
+  `CE(sub_logits + log π_sub, y-1)` on abnormal samples only + smoothness.
+  (Rationale: `hier` double-corrected; `hier_la` left the abn head with no
+  imbalance handling → abnormal underpredicted → F collapsed to 0.019.)
+- Data: `data/processed/splits/` (official plain split — the head + loss is the
+  only variable).
+- Question: does correcting each level with its own natural prior finally let the
+  hierarchical head beat the flat softmax on S/F?
+- Read: `python train_hd_ladder.py --variant hier_ba --seeds 42 123 --summarize-only`
 
-**Next if step 2 works** (mean held/up + variance not worse): build step 3
-(dual-lead V1 branch). **Next if step 2 fails**: build step 4 (GRL de-confound)
-standalone on the flat model, or pivot to DSTA.
+**Decision rule for the hierarchical head**: `hier_ba` is its last calibration
+variant. If it also fails to lift S/F mean → the hierarchical head is dead, move
+to step 3 (dual-lead V1) on the FLAT model, or step 4 (GRL de-confound), or pivot
+to DSTA. If it works → **re-confirm on 3 seeds (42/123/456) + SWA** before keeping.
+
+### Also being built now (no GPU needed): the LOPO / grouped-K-fold harness
+Per the external review (2026-08-29): the biggest gap is *evaluation*, not
+architecture — the fixed DS1/DS2 F1-F/F1-S can never become "stable" because
+test-F is one patient. Build the record-level CV harness BEFORE combining
+architecture changes.
+- `validation/preprocess_lopo.py` → `data/processed/lopo/pool.npz` (185k beats,
+  80 records: 44 MIT-BIH MLII + 36 INCART F/S-bearing lead-II w/ 0.5 Hz HP).
+  F from 34 records (17 MIT + 17 INCART), S from 62. **DONE, built.**
+- `train_lopo_cv.py` — grouped K-fold (K=5), records as fold unit, snake-drafted
+  by F/S beat count so 208/213/232 land in different folds. Per-fold: inner-val
+  (record-disjoint, ~15%) for model selection on {S,V,F}-macro; per-source
+  z-score fit on train-fold only; **SWA over tail epochs** (the B2 fix); eval
+  split by database (MIT vs INCART). Resumable per fold. **BUILT, helper unit
+  tests pass, needs a 1-fold GPU smoke before the full run.**
+  `python train_lopo_cv.py --arch flat --k 5 --epochs 25`
+- Fold F-beat counts: 399/388/82/72/42 (folds 0,1 carry 208,213; 2-4 carry the
+  diffuse F tail + INCART). S-beat: 388/391/576/860/2490 (fold 4 carries 232).
+  Heterogeneous by construction — the 5 fold values ARE the patient distribution.
+- **Run order**: hier_ba finishes → LOPO `flat` baseline (~20-27h, one-time
+  reference distribution) → then LOPO is the eval for steps 3/4/5.
 
 ---
 
@@ -113,10 +136,12 @@ Status: ✅ kept / ❌ rejected / 🔄 running / ⏸ built-not-run
 | 08-28 | **Cross-DB Stage A, run 1** | MIT-BIH DS1 + INCART pooled, plain arch | DS2 macro .375, V collapsed | ❌ **FAILED** — INCART baseline-wander bug + recipe drift |
 | 08-29 | **Cross-DB Stage A, v2** (fixed) | + 0.5 Hz Butterworth HP on INCART, per-source z-score, DS2 re-extracted (=byte-identical to paper), official recipe imported. 3 seeds. | macro .582±.031 (=off .584); **S .174±.002 — variance killed but mean COLLAPSED .33→.17**; **F .311±.106 — mean up +.13 but spread .259 not reduced**; best_ep still 5/14/5 | ❌ **Pooling rejected.** INCART S = different domain. Val-blindness hypothesis (tier 1b) largely disproven. F-mean lever noted for a later Stage-B oversample. |
 | 08-29 | **HD ladder step 1 (`hier`)** | flat softmax → soft hierarchical head; loss kept = focal γ1.5 + class weights. 2 seeds (42,123). | macro .560 vs off .621; **S .261 vs .397; F .173 vs .255** — worse across the board | ❌ **Rejected.** Hierarchical head + big class weights + focal = double imbalance correction. |
-| 08-29 | **HD ladder step 2 (`hier_la`)** | soft hierarchical head + balanced-softmax/logit-adjust; focal OFF, weights OFF. 2 seeds (42,123). | — | 🔄 **RUNNING** |
-| — | HD ladder step 3 (dual-lead V1) | + separate V1 CNN branch | — | ⏸ not built |
-| — | HD ladder step 4 (GRL de-confound) | + gradient-reversal patient classifier | — | ⏸ not built |
-| — | LOPO-CV evaluation harness | pooled MIT-BIH+INCART(+SVDB) patient-out CV | — | ⏸ not built |
+| 08-29 | **HD ladder step 2 (`hier_la`)** | hier head + logit-adjust on [S,V,F,Q] sub-head only; focal OFF, weights OFF. seed 42 (killed 123 mid-run). | seed42: macro .496, S .129, **F .019** | ❌ **Rejected, worse.** Abn head had NO imbalance correction → abnormal underpredicted → F collapses. |
+| 08-29 | **HD ladder step 2b (`hier_ba`)** | `HDLossBalanced`: prior-correct BOTH levels — BCE(abn, pos_weight≈8.4) + logit-adj sub CE. 2 seeds. | — | 🔄 **RUNNING** — hierarchical head's last calibration attempt |
+| 08-29 | **LOPO / grouped-K-fold harness** | `preprocess_lopo.py` + `train_lopo_cv.py` (K=5 over records, per-fold norm, inner-val selection, SWA, by-DB reporting) | — | ✅ **built** (helper tests pass); flat baseline run pending |
+| — | LOPO `flat` baseline | 5-fold CV of the plain RLSTMClassifier | — | ⏸ next after hier_ba |
+| — | HD ladder step 3 (dual-lead V1) | + separate V1 CNN branch, eval via LOPO | — | ⏸ not built |
+| — | HD ladder step 4 (GRL de-confound) | + gradient-reversal record classifier, eval via LOPO | — | ⏸ not built |
 
 **Reference — official baseline (`data/processed/splits/`, full recipe), per seed:**
 `42: macro .6279 N .9643 S .4335 V .8728 F .2411` ·
