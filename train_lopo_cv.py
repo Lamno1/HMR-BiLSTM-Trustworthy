@@ -48,6 +48,13 @@ CLASS_NAMES = ["N", "S", "V", "F", "Q"]
 POOL = Path("data/processed/lopo/pool.npz")
 RECMETA = Path("data/processed/lopo/records.json")
 
+# Fixed sentinel screening fold (see docs/LOPO_PROTOCOL.md). Held-out test =
+# the two canonical hard MIT-BIH patients + the largest cross-DB INCART F/S
+# records. A rung must beat sentinel F1(213-F) and F1(232-S) WITHOUT dropping
+# N/V before it earns a full 5-fold LOPO run. 208 stays in train here.
+SENTINEL_TEST = ["mitdb/213", "mitdb/232", "incart/I18", "incart/I74",
+                 "incart/I33", "incart/I62"]
+
 
 # --------------------------------------------------------------------------- folds
 def assign_folds(rec_cls, rec_src, k, seed):
@@ -153,7 +160,8 @@ def train_fold(fold, idx, X, y, src, rr, device, args, ckpt_dir):
     ytr, yva, yte = y[tr_i], y[va_i], y[te_i]
 
     # subsample train N to keep per-epoch cost ~ DS1
-    rng = np.random.default_rng(args.seed + fold)
+    fold_off = fold if isinstance(fold, int) else 99
+    rng = np.random.default_rng(args.seed + fold_off)
     n_i = np.where(ytr == 0)[0]
     if len(n_i) > args.train_n_cap:
         drop = rng.choice(n_i, len(n_i) - args.train_n_cap, replace=False)
@@ -267,6 +275,7 @@ def summarize(out_dir, arch, k):
 def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("--arch", default="flat", choices=["flat"])
+    ap.add_argument("--mode", default="kfold", choices=["kfold", "sentinel"])
     ap.add_argument("--k", type=int, default=5)
     ap.add_argument("--epochs", type=int, default=25)
     ap.add_argument("--seed", type=int, default=42)
@@ -281,13 +290,41 @@ def main():
     out_dir = Path(args.out_dir); ckpt_dir = out_dir / "checkpoints"
     ckpt_dir.mkdir(parents=True, exist_ok=True)
     if args.summarize_only:
-        summarize(out_dir, args.arch, args.k); return
+        summarize(out_dir, args.arch, args.k if args.mode == "kfold" else 1); return
 
     d = np.load(POOL)
     X, y, rr, record, source = d["X"], d["y"], d["rr"], d["record"], d["source"]
     rec_cls = {int(r): np.bincount(y[record == r], minlength=5).astype(float)
                for r in np.unique(record)}
     rec_src = {int(r): int(source[record == r][0]) for r in np.unique(record)}
+
+    # ---- SENTINEL mode: one fixed screening fold, benchmark wall-time here ----
+    if args.mode == "sentinel":
+        recmeta = json.load(open(RECMETA))["records"]
+        name2id = {v["name"]: int(k) for k, v in recmeta.items()}
+        te_recs = {name2id[n] for n in SENTINEL_TEST if n in name2id}
+        missing = [n for n in SENTINEL_TEST if n not in name2id]
+        if missing:
+            print(f"[warn] sentinel records not in pool: {missing}")
+        trval = [r for r in rec_cls if r not in te_recs]
+        va_recs = carve_inner_val(trval, rec_cls, rec_src, args.inner_val_frac, args.fold_seed)
+        tr_recs = set(trval) - va_recs
+        idx = (np.where(np.isin(record, list(tr_recs)))[0],
+               np.where(np.isin(record, list(va_recs)))[0],
+               np.where(np.isin(record, list(te_recs)))[0])
+        device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+        print(f"Device: {device}\n=== SENTINEL fold  test={sorted(SENTINEL_TEST)} ===")
+        rp = out_dir / f"sentinel_{args.arch}.json"
+        res = train_fold("sentinel", idx, X, y, source, rr, device, args, ckpt_dir)
+        json.dump(res, open(rp, "w"), indent=2)
+        print(f"\n[OK] {rp}")
+        print(f"[BENCHMARK] one fold ({args.epochs} ep) = {res['train_time_sec']/60:.0f} min "
+              f"=> full 5-fold ~ {5*res['train_time_sec']/3600:.1f} h/seed")
+        m = res.get("swa_model", res["best_epoch_model"])
+        print(f"[SENTINEL] all: F1_F={m['all']['F']:.3f} F1_S={m['all']['S']:.3f} "
+              f"N={m['all']['N']:.3f} V={m['all']['V']:.3f} | "
+              f"mitbih F1_F={m['mitbih']['F']:.3f} F1_S={m['mitbih']['S']:.3f}")
+        return
 
     fold_of = assign_folds(rec_cls, rec_src, args.k, args.fold_seed)
     fold_recs = defaultdict(list)

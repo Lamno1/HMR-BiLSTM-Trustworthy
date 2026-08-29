@@ -95,33 +95,57 @@ achievable number and must be stated plainly in the paper.
 
 ---
 
-## 3. Target architecture: HMR-BiLSTM-HD
+## 3. Target architecture: HMR-MultiPath (LOCKED 2026-08-29 via external review)
 
-Front end (CNN + BiRLSTM + attention pool) **unchanged**. Four additions, each a
-ladder rung:
+ONE model. DSTA-C and CAMP-Net are frozen as evidence/fallback — they add
+gate/state/loss complexity on the same MLII + shared representation (wrong
+inductive bias); they do not address the measured causes. Do NOT build/run
+DSTA-HD or CAMP-HD in parallel.
 
-1. **Soft hierarchical head** (attacks tier 3). Replace flat softmax:
-   `p_abn = σ(abn_head(e))`, `q = softmax(sub_head(e))` over [S,V,F,Q];
-   `P(N) = 1 − p_abn`, `P(c) = p_abn · q[c]`. Differentiable, end-to-end, **no hard
-   router** (the hard cascade misrouted 26% of F — dead end). Implemented in
-   `hmr_hd.py::RLSTMClassifierHD`. Output = 5-way log-probs; `softmax(log_probs) ==
-   probs`, so `train_inter_patient.evaluate()` works unchanged.
-2. **Balanced-softmax / logit adjustment** (Menon et al. 2020) on the sub-head
-   (attacks tier 3 + A6). `HDLoss(logit_adjust=τ·log prior)`. Replaces ad-hoc
-   focal + class weights.
-3. **Dual-lead V1 branch** (attacks tier 4). MLII → proven backbone unchanged;
-   V1 → separate lightweight CNN; fuse at pooled embedding. **Not** both leads
-   through the shared CNN (that halved F1-S, 3-seed confirmed). NOT built yet.
-4. **Patient de-confounding** (attacks tier 2). Gradient-reversal patient/record
-   classifier on the embedding, λ ramp 0→0.3 over 10 epochs. ± supervised
-   contrastive. NOT built yet.
+```
+MLII ── HMR-BiLSTM trunk ── e_morph ─────────────┐
+                                                  ├─ shared N/V/Q logits (from e_morph)
+V1 ─── lightweight CNN ───── e_v1 ───────────────┤
+                                                  ├─ F-specialist: [e_morph, e_v1] → z_F
+RR/context ─ rhythm MLP ──── e_rhythm ───────────┤
+                                                  └─ S-specialist: [e_morph, e_rhythm] → z_S
 
-Plus a **rhythm MLP** on [pre_RR, post_RR, local_RR, post/pre] concatenated at the
-embedding (attacks tier 4 / B3), and optional **multi-beat context** input.
+e_morph ── class-conditional GRL record adversary  (adversary sees [e_morph, onehot(y_true)])
 
-**Evaluation target**: LOPO-CV over all F/S-bearing patients (MIT-BIH 208/213 +
-INCART records + SVDB for S) → F1-F/F1-S mean ± std over held-out patients.
-Still report DS1/DS2 3-seed for literature comparison. NOT built yet.
+[z_N, z_S, z_V, z_F, z_Q] ── softmax ── calibrated/balanced 5-way loss   (NO hierarchical gate)
+```
+
+Design principles (locked):
+- HMR stays the morphology trunk — only thing that ever held S and F together.
+- V1 → **only** the F branch. Not both leads through a shared CNN (that halved F1-S).
+- RR/context → **only** the S branch. Not through the recurrent gate (β throttled 140×).
+- F and S get **separate heads** — no shared classifier forced to learn two
+  opposing clinical definitions.
+- GRL = **conditional record adversary**: input `[e_morph, onehot(y_true)]`,
+  predicts record_id, reversed gradient → encoder drops record info *conditioned
+  on class*, keeping the class signal. N-only adversary = diagnostic/ablation
+  backup only. λ ramp 0→0.2. Kill rule: F1-N or F1-V drops clearly, OR seed/fold
+  variance does not improve.
+- Final head is class-specific logits from different feature subsets → concat →
+  softmax. **Not** a hierarchical binary gate. Differentiable.
+- hier_ba (§4) only tells us whether a balance mechanism works *when a binary
+  abnormal gate exists*. MultiPath has no such gate → do NOT carry `pos_weight`
+  over. Step-4 calibration is decided **independently** for the flat 5-way head
+  (balanced-softmax / logit-adjust on the 5 final logits is a valid, not-yet-run
+  test regardless of hier_ba's outcome).
+
+### Build order (one module per rung, ablate via sentinel then LOPO)
+| rung | add | attacks | gate to promote |
+|---|---|---|---|
+| 0 | HMR trunk + flat 5-way head (= `train_lopo_cv.py --arch flat`) | — (reference) | establishes baseline distribution |
+| 1 | V1 CNN branch + F-specialist head | B4, B3 | sentinel F1(213-F) ↑, F1-S/N/V not down |
+| 2 | rhythm MLP + S-specialist head | B3, tier-4 | sentinel F1(232-S) ↑, others not down |
+| 3 | conditional GRL record adversary | tier 2 (A3) | fold/seed variance ↓, N/V held |
+| 4 | calibrated/balanced final 5-way loss | B1 | mean ↑, variance not worse |
+
+**Evaluation**: sentinel screening fold first (`--mode sentinel`), then full
+5-fold LOPO 2-seed only for rungs that pass. Protocol: `docs/LOPO_PROTOCOL.md`.
+Final kept model also gets DS1/DS2 3-seed for the comparison table.
 
 ---
 
@@ -138,10 +162,12 @@ Status: ✅ kept / ❌ rejected / 🔄 running / ⏸ built-not-run
 | 08-29 | **HD ladder step 1 (`hier`)** | flat softmax → soft hierarchical head; loss kept = focal γ1.5 + class weights. 2 seeds (42,123). | macro .560 vs off .621; **S .261 vs .397; F .173 vs .255** — worse across the board | ❌ **Rejected.** Hierarchical head + big class weights + focal = double imbalance correction. |
 | 08-29 | **HD ladder step 2 (`hier_la`)** | hier head + logit-adjust on [S,V,F,Q] sub-head only; focal OFF, weights OFF. seed 42 (killed 123 mid-run). | seed42: macro .496, S .129, **F .019** | ❌ **Rejected, worse.** Abn head had NO imbalance correction → abnormal underpredicted → F collapses. |
 | 08-29 | **HD ladder step 2b (`hier_ba`)** | `HDLossBalanced`: prior-correct BOTH levels — BCE(abn, pos_weight≈8.4) + logit-adj sub CE. 2 seeds. | — | 🔄 **RUNNING** — hierarchical head's last calibration attempt |
-| 08-29 | **LOPO / grouped-K-fold harness** | `preprocess_lopo.py` + `train_lopo_cv.py` (K=5 over records, per-fold norm, inner-val selection, SWA, by-DB reporting) | — | ✅ **built** (helper tests pass); flat baseline run pending |
-| — | LOPO `flat` baseline | 5-fold CV of the plain RLSTMClassifier | — | ⏸ next after hier_ba |
-| — | HD ladder step 3 (dual-lead V1) | + separate V1 CNN branch, eval via LOPO | — | ⏸ not built |
-| — | HD ladder step 4 (GRL de-confound) | + gradient-reversal record classifier, eval via LOPO | — | ⏸ not built |
+| 08-29 | **LOPO harness + sentinel fold** | `preprocess_lopo.py` + `train_lopo_cv.py` (`--mode kfold|sentinel`, per-fold norm, inner-val selection on {S,V,F}, SWA, by-DB). Protocol locked in `docs/LOPO_PROTOCOL.md`. | — | ✅ **built** (helper tests pass); needs 1-fold GPU smoke + wall-time benchmark |
+| — | HMR-MultiPath rung 0 (`flat` sentinel + LOPO) | plain trunk, reference distribution | — | ⏸ next after hier_ba |
+| — | HMR-MultiPath rung 1 (V1 + F-specialist) | attacks B4/B3 | — | ⏸ not built |
+| — | HMR-MultiPath rung 2 (rhythm MLP + S-specialist) | attacks B3 | — | ⏸ not built |
+| — | HMR-MultiPath rung 3 (conditional GRL) | attacks A3 | — | ⏸ not built |
+| — | HMR-MultiPath rung 4 (calibrated final head) | attacks B1 | — | ⏸ not built |
 
 **Reference — official baseline (`data/processed/splits/`, full recipe), per seed:**
 `42: macro .6279 N .9643 S .4335 V .8728 F .2411` ·
