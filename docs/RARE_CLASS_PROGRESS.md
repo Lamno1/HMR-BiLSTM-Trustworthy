@@ -51,12 +51,15 @@ PID 1123, ~8 min/epoch, done ~08:45 2026-08-30).
 - `data/processed/lopo/pool.npz` **v2** — now carries `X2` (2nd lead: MIT-BIH
   precordial (V1 ×38/44), INCART V1; both high-passed; 0% zero-filled).
 
-**Immediate run queue** (one GPU job at a time):
-1. sentinel `flat` (running) → flat reference + `[BENCHMARK]`
-2. `train_multipath_lopo.py --mode sentinel --v1 --epochs 25` → rung 1, compare
-   sentinel F1(213-F) vs flat
-3. rung 1 passes sentinel (F1-213-F ↑, S/N/V not down) → `--v1` full 5-fold LOPO
-   2-seed; then sentinel rung 2 (`--v1 --rhythm`); etc.
+**Sentinel `flat` reference (SWA), the bar every rung must beat:**
+`mitbih F1_F=0.411  F1_S=0.163` · `all F1_F=0.477 F1_S=0.507 N=0.927 V=0.954`
+(232-S at 0.16 is the weakest point — rung 2 rhythm S-specialist targets it.)
+
+**Immediate run queue** (one GPU job at a time, ~3.3 h/sentinel-fold):
+1. ✅ sentinel `flat`
+2. 🔄 `--mode sentinel --v1` (rung 1) — does the V1 F-specialist lift F1-213-F?
+3. rung passes sentinel (its class ↑, others not down) → full 5-fold LOPO 2-seed;
+   then sentinel next rung. Rungs: `--v1` → `--v1 --rhythm` → `+--grl` → `+--loss balanced`.
 
 ### Hierarchical head: CLOSED (2026-08-30)
 All three calibration variants failed on DS2 (vs official F .255 / S .397):
@@ -175,7 +178,8 @@ Status: ✅ kept / ❌ rejected / 🔄 running / ⏸ built-not-run
 | 08-29 | **HD ladder step 1 (`hier`)** | flat softmax → soft hierarchical head; loss kept = focal γ1.5 + class weights. 2 seeds (42,123). | macro .560 vs off .621; **S .261 vs .397; F .173 vs .255** — worse across the board | ❌ **Rejected.** Hierarchical head + big class weights + focal = double imbalance correction. |
 | 08-29 | **HD ladder step 2 (`hier_la`)** | hier head + logit-adjust on [S,V,F,Q] sub-head only; focal OFF, weights OFF. seed 42 (killed 123 mid-run). | seed42: macro .496, S .129, **F .019** | ❌ **Rejected, worse.** Abn head had NO imbalance correction → abnormal underpredicted → F collapses. |
 | 08-30 | **HD ladder step 2b (`hier_ba`)** | `HDLossBalanced`: prior-correct BOTH levels — BCE(abn, pos_weight≈8.4) + logit-adj sub CE. 2 seeds. | macro .539 vs off .621; S .218 vs .397; **F .097 vs .255** (F stable spread .007 but collapsed) | ❌ **Rejected.** 3/3 calibration variants fail. **Hierarchical head is DEAD** — decision head alone is not a big enough lever. Do NOT put the binary abn gate in HMR-MultiPath. |
-| 08-30 | **LOPO sentinel `flat` baseline** | `train_lopo_cv.py --mode sentinel --arch flat --epochs 25` — reference + wall-time benchmark | — | 🔄 **RUNNING** |
+| 08-30 | **LOPO sentinel `flat` baseline** (SWA) | plain RLSTMClassifier, sentinel fold, 25 ep, {S,V,F} selection, train-N cap 35k, 208+INCART-F in train | **all**: F .477 S .507 N .927 V .954 · **mitbih (213-F/232-S)**: F **.411** S **.163** · **incart**: F .622 S .939 | ✅ **reference set.** {SWA + {S,V,F}-selection + INCART-F in train + N-cap} ≈ **doubled F1-213-F vs DS1/DS2 (.24→.41)**. Residual hard problem = MIT-BIH 232-S (.16, INCART S .94 doesn't transfer) and pushing 213-F further. **[BENCHMARK] 197 min/fold → full 5-fold ~16.5 h/seed.** |
+| 08-30 | **MultiPath rung 1 sentinel** (`--v1`) | + V1 CNN → F-specialist head | — | 🔄 **RUNNING** (PID 1410) |
 | 08-29 | **LOPO harness + sentinel fold** | `preprocess_lopo.py` + `train_lopo_cv.py` (`--mode kfold|sentinel`, per-fold norm, inner-val selection on {S,V,F}, SWA, by-DB). Protocol locked in `docs/LOPO_PROTOCOL.md`. | — | ✅ **built** (helper tests pass); needs 1-fold GPU smoke + wall-time benchmark |
 | — | HMR-MultiPath rung 0 (`flat` sentinel + LOPO) | plain trunk, reference distribution | — | ⏸ next after hier_ba |
 | — | HMR-MultiPath rung 1 (V1 + F-specialist) | attacks B4/B3 | — | ⏸ not built |
