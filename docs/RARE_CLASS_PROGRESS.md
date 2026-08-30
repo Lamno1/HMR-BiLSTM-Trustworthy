@@ -51,9 +51,12 @@ PID 1123, ~8 min/epoch, done ~08:45 2026-08-30).
 - `data/processed/lopo/pool.npz` **v2** — now carries `X2` (2nd lead: MIT-BIH
   precordial (V1 ×38/44), INCART V1; both high-passed; 0% zero-filled).
 
-**Sentinel `flat` reference (SWA), the bar every rung must beat:**
-`mitbih F1_F=0.411  F1_S=0.163` · `all F1_F=0.477 F1_S=0.507 N=0.927 V=0.954`
-(232-S at 0.16 is the weakest point — rung 2 rhythm S-specialist targets it.)
+**Sentinel `flat` reference, the bar every rung must beat** (best-epoch / SWA):
+`mitbih F1_F 0.443 / 0.411 · F1_S 0.032 / 0.163` ·
+`all F1_F 0.474 / 0.477 · F1_S 0.448 / 0.507 · N .92 · V .93/.95`
+232-S is the weakest point (SWA .16, best-ep .03) — rung 2 rhythm S-specialist
+targets it. SWA helps S/V/macro, slightly hurts the hardest F (213) — report both,
+let the full 5-fold decide.
 
 **Immediate run queue** (one GPU job at a time, ~3.3 h/sentinel-fold):
 1. ✅ sentinel `flat`
@@ -179,7 +182,8 @@ Status: ✅ kept / ❌ rejected / 🔄 running / ⏸ built-not-run
 | 08-29 | **HD ladder step 2 (`hier_la`)** | hier head + logit-adjust on [S,V,F,Q] sub-head only; focal OFF, weights OFF. seed 42 (killed 123 mid-run). | seed42: macro .496, S .129, **F .019** | ❌ **Rejected, worse.** Abn head had NO imbalance correction → abnormal underpredicted → F collapses. |
 | 08-30 | **HD ladder step 2b (`hier_ba`)** | `HDLossBalanced`: prior-correct BOTH levels — BCE(abn, pos_weight≈8.4) + logit-adj sub CE. 2 seeds. | macro .539 vs off .621; S .218 vs .397; **F .097 vs .255** (F stable spread .007 but collapsed) | ❌ **Rejected.** 3/3 calibration variants fail. **Hierarchical head is DEAD** — decision head alone is not a big enough lever. Do NOT put the binary abn gate in HMR-MultiPath. |
 | 08-30 | **LOPO sentinel `flat` baseline** (SWA) | plain RLSTMClassifier, sentinel fold, 25 ep, {S,V,F} selection, train-N cap 35k, 208+INCART-F in train | **all**: F .477 S .507 N .927 V .954 · **mitbih (213-F/232-S)**: F **.411** S **.163** · **incart**: F .622 S .939 | ✅ **reference set.** {SWA + {S,V,F}-selection + INCART-F in train + N-cap} ≈ **doubled F1-213-F vs DS1/DS2 (.24→.41)**. Residual hard problem = MIT-BIH 232-S (.16, INCART S .94 doesn't transfer) and pushing 213-F further. **[BENCHMARK] 197 min/fold → full 5-fold ~16.5 h/seed.** |
-| 08-30 | **MultiPath rung 1 sentinel** (`--v1`) | + V1 CNN → F-specialist head | — | 🔄 **RUNNING** (PID 1410) |
+| 08-30 | **MultiPath rung 1 sentinel** (`--v1`, *replace* wiring) | F-specialist head **replaces** shared F logit | SWA mitbih F **.312** (flat .411), all F .367 (flat .477); S also down | ❌ **Rejected.** Narrow F-only path `[e_morph+e_v1]→1` underfits vs the shared head co-trained on abundant N/V gradient. `sentinel_vce_replaceWiring_REJECTED.json`. |
+| 08-31 | **MultiPath rung 1b sentinel** (`--v1`, *residual* wiring) | `z_F = shared_F + f_corr`, f_corr head zero-init → starts == flat, V1 only moves F if it carries signal | — | 🔄 **RUNNING** (PID 1809) |
 | 08-29 | **LOPO harness + sentinel fold** | `preprocess_lopo.py` + `train_lopo_cv.py` (`--mode kfold|sentinel`, per-fold norm, inner-val selection on {S,V,F}, SWA, by-DB). Protocol locked in `docs/LOPO_PROTOCOL.md`. | — | ✅ **built** (helper tests pass); needs 1-fold GPU smoke + wall-time benchmark |
 | — | HMR-MultiPath rung 0 (`flat` sentinel + LOPO) | plain trunk, reference distribution | — | ⏸ next after hier_ba |
 | — | HMR-MultiPath rung 1 (V1 + F-specialist) | attacks B4/B3 | — | ⏸ not built |

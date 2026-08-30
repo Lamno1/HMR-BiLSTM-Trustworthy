@@ -106,11 +106,13 @@ class HMRMultiPath(nn.Module):
             self.f_head = nn.Sequential(
                 nn.Linear(H + v1_dim, hidden_size), nn.ReLU(), nn.Dropout(dropout),
                 nn.Linear(hidden_size, 1))
+            nn.init.zeros_(self.f_head[-1].weight); nn.init.zeros_(self.f_head[-1].bias)
         if use_rhythm:
             self.rhythm = RhythmMLP(rr_dim, rhythm_dim, dropout * 0.5)
             self.s_head = nn.Sequential(
                 nn.Linear(H + rhythm_dim, hidden_size), nn.ReLU(), nn.Dropout(dropout),
                 nn.Linear(hidden_size, 1))
+            nn.init.zeros_(self.s_head[-1].weight); nn.init.zeros_(self.s_head[-1].bias)
         if use_grl:
             assert n_records > 0
             self.adv = nn.Sequential(
@@ -128,14 +130,19 @@ class HMRMultiPath(nn.Module):
         e, r_fwd, r_bwd, attn = self.embed(x)
         logits = self.shared_head(e)                       # (B,5) [N,S,V,F,Q]
 
+        # specialists are RESIDUAL corrections on the shared logit (zero-init final
+        # layer => model starts identical to the flat 5-way head; V1 / rhythm only
+        # move F / S if they actually carry signal). Rung 1 with a *replace*
+        # wiring failed sentinel (F1-213-F .41 -> .31) — the narrow F-only path
+        # underfits vs the shared head co-trained on abundant N/V gradient.
         if self.use_v1:
-            zf = self.f_head(torch.cat([e, self.l2cnn(x2)], dim=-1)).squeeze(-1)
+            f_corr = self.f_head(torch.cat([e, self.l2cnn(x2)], dim=-1)).squeeze(-1)
             logits = logits.clone()
-            logits[:, 3] = zf
+            logits[:, 3] = logits[:, 3] + f_corr
         if self.use_rhythm:
-            zs = self.s_head(torch.cat([e, self.rhythm(rr)], dim=-1)).squeeze(-1)
+            s_corr = self.s_head(torch.cat([e, self.rhythm(rr)], dim=-1)).squeeze(-1)
             logits = logits.clone()
-            logits[:, 1] = zs
+            logits[:, 1] = logits[:, 1] + s_corr
 
         adv_logits = None
         if self.use_grl and self.training and y is not None:
