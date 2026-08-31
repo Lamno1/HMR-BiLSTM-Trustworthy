@@ -32,48 +32,55 @@ Last updated: **2026-08-29** (HD ladder step 2b `hier_ba` running; `hier` and `h
 
 ---
 
-## 1. CURRENT STEP  (session handoff 2026-08-31 ~15:00)
+## 1. CURRENT STEP  (session handoff 2026-08-31 ~19:00 — sentinel screening DONE)
 
-**Two sentinel jobs running in PARALLEL** (AMP on, RAM ok, ~3.5 h):
-- PID 198 — `train_multipath_lopo.py --mode sentinel --v1 --rhythm --grl --epochs 25`
-  → `results/mp_lopo/sentinel_vrgce.json`, log `results/logs/mp_sentinel_v1rg.log`
-- PID 270 — `train_multipath_lopo.py --mode sentinel --v1 --rhythm --loss balanced --epochs 25`
-  → `results/mp_lopo/sentinel_vrbalanced.json`, log `results/logs/mp_sentinel_v1r_bal.log`
-Both are "rung 2 + one more module" — compare each to rung 2 (`sentinel_vrce.json`),
-then STACK whichever module(s) help. **User is closing this session; a new session
-picks up here.**
+**All MultiPath sentinel rungs screened. Final stack = `--v1 --rhythm` (R2).**
+No jobs running. New session picks up at "NEXT" below.
 
-**When the two jobs finish** — read `results/mp_lopo/sentinel_{vrgce,vrbalanced}.json`
-(best_epoch_model + swa_model, blocks all / mitbih / incart). Compare to the table
-below. Promotion rule (`docs/LOPO_PROTOCOL.md`): a rung stacks only if its target
-class ↑ on the sentinel *best-epoch* model without F1-N/F1-V dropping.
+**Full sentinel ladder** (test = held-out MIT-BIH 213-F + 232-S; best-epoch model,
+SWA in parens; `results/{lopo_cv,mp_lopo}/sentinel_*.json`):
 
-**Sentinel progression so far (best-epoch model; SWA in parens):**
-
-| rung | mitbih F (213) | mitbih S (232) | mitbih macro | all macro | verdict |
+| rung | mitbih F | mitbih S | mitbih N | mitbih macro | verdict |
 |---|---|---|---|---|---|
-| flat | 0.443 (.411) | 0.032 (.163) | 0.503 (.559) | 0.694 (.717) | reference (`results/lopo_cv/sentinel_flat.json`) |
-| +V1 replace | .335 (.312) | — | — | — | ❌ rejected (wiring) |
-| +V1 residual (R1b) | 0.461 (.440) | 0.178 (.169) | 0.563 (.566) | 0.721 (.714) | ✅ kept (`sentinel_vce.json`) |
-| +rhythm (R2) | **0.564** (.338) | **0.274** (.407) | **0.626** (.600) | **0.750** (.725) | ✅ kept (`sentinel_vrce.json`) |
-| R2 +GRL | 🔄 PID 198 | 🔄 | 🔄 | 🔄 | pending |
-| R2 +balanced | 🔄 PID 270 | 🔄 | 🔄 | 🔄 | pending |
+| flat | 0.443 (.411) | 0.032 (.163) | 0.79 | 0.503 (.559) | reference |
+| +V1 residual (R1b) | 0.461 (.440) | 0.178 (.169) | 0.80 | 0.563 (.566) | ✅ kept |
+| +rhythm (R2) | **0.564** (.338) | **0.274** (.407) | **0.82** | **0.626** (.600) | ✅ **KEPT — final stack** |
+| +GRL (R3) | 0.089 (.234) | 0.361 (.388) | 0.82 | 0.497 (.562) | ❌ **rejected** — GRL scrubs F morphology from e_morph (F1-F craters, V −0.13) |
+| +balanced (R3b) | 0.285 (.300) | 0.559 (.560) | **0.62** (.80) | 0.582 (.630) | ❌ **rejected as a stack** — trades F+N for S; best-ep N 0.82→0.62, macro < R2 |
 
-Official DS1/DS2 baseline: F1-F ~0.24, F1-S ~0.40 (best seed). On the sentinel
-best-epoch model, **+V1+rhythm already takes 213-F 0.24→0.56 and 232-S ~0.03→0.27.**
+Official DS1/DS2: F1-F ~0.24, F1-S ~0.40 (best seed). **R2 on the sentinel
+best-epoch model: 213-F 0.24→0.56, 232-S ~0.03→0.27, mitbih macro 0.50→0.63,
+N held.** That is the headline candidate.
 
-**NEXT (after the 2 jobs, for the new session):**
-1. Decide which of GRL / balanced to keep (sentinel best-epoch, don't drop N/V).
-2. Final stack (`--v1 --rhythm [+ winners]`) → **full 5-fold LOPO 2-seed**:
-   `train_multipath_lopo.py --mode kfold <flags> --k 5 --seeds 42 123`
-   (~16.5 h/seed; split folds across 2 parallel procs with `--folds 0 1 2` /
-   `--folds 3 4`). Also run the **flat** baseline full 5-fold for the comparison.
-3. Then DS1/DS2 3-seed of the final model (needs a small MLII+V1 adapter — see §6).
-4. Ablation table + paper write-up (§ E of the plan).
+Notes:
+- SWA (0.8E window) still hurts R2's F (best-ep .564 → SWA .338) — the rhythm
+  specialist shifts S↑/F↓ late in training; **best-epoch + {S,V,F} selection is
+  the model to report**, SWA is not helping this arch. The full 5-fold decides
+  whether best-epoch's *fold-to-fold variance* is acceptable (the actual goal).
+- De-confounding (tier 2 / A3): handled by INCART patient diversity in train +
+  LOPO holding patients out. Forcing it with a record adversary destroys F. Closed.
+- balanced-softmax: if the paper's framing later shifts to "maximize S, defer F",
+  R3b is on record (232-S 0.56) — but not the default.
 
-**Everything BUILT & committed** (`git log`): `hmr_multipath.py`, `train_multipath_lopo.py`,
-`train_lopo_cv.py` (+AMP), `validation/preprocess_lopo.py` v2 (2-lead pool),
-`docs/LOPO_PROTOCOL.md`. Pool: `data/processed/lopo/pool.npz` (X, X2, y, rr, record, source).
+**NEXT (new session):**
+1. **Full 5-fold LOPO, 2 seeds, on R2** (`--v1 --rhythm`) — the real validation:
+   ```
+   python train_multipath_lopo.py --mode kfold --v1 --rhythm --k 5 --seeds 42 123 --folds 0 1 2
+   python train_multipath_lopo.py --mode kfold --v1 --rhythm --k 5 --seeds 42 123 --folds 3 4
+   ```
+   (two parallel procs; AMP on; ~16.5 h/seed total, resumable per fold). Writes
+   `results/mp_lopo/fold{f}_seed{s}_vrce.json`; `--summarize-only`-style read via
+   `train_multipath_lopo.summarize`. **Success = per-fold F1-F/F1-S mean ↑ vs the
+   flat baseline AND std small** (that is the whole point — not a single number).
+2. **Full 5-fold LOPO flat baseline** for the comparison:
+   `python train_lopo_cv.py --arch flat --k 5 --epochs 25` (also splittable via `--folds`).
+3. DS1/DS2 3-seed of R2 for the literature table — needs a MLII+V1 loader on the
+   official split (§6; INCART not involved there, V1 = `p_signal[:,1]`).
+4. Ablation table (flat / +V1 / +rhythm) + paper write-up (plan § D-E).
+
+**Everything BUILT & committed**: `hmr_multipath.py`, `train_multipath_lopo.py`,
+`train_lopo_cv.py` (+AMP), `validation/preprocess_lopo.py` v2, `docs/LOPO_PROTOCOL.md`.
+Pool: `data/processed/lopo/pool.npz` (X, X2, y, rr, record, source).
 
 ### Hierarchical head: CLOSED (2026-08-30)
 All three calibration variants failed on DS2 (vs official F .255 / S .397):
@@ -196,8 +203,9 @@ Status: ✅ kept / ❌ rejected / 🔄 running / ⏸ built-not-run
 | 08-30 | **MultiPath rung 1 sentinel** (`--v1`, *replace* wiring) | F-specialist head **replaces** shared F logit | SWA mitbih F **.312** (flat .411), all F .367 (flat .477); S also down | ❌ **Rejected.** Narrow F-only path `[e_morph+e_v1]→1` underfits vs the shared head co-trained on abundant N/V gradient. `sentinel_vce_replaceWiring_REJECTED.json`. |
 | 08-31 | **MultiPath rung 1b sentinel** (`--v1`, *residual*) | `z_F = shared_F + f_corr` (zero-init) | **best-ep**: mitbih F **.461** (flat .443) S **.178** (.032) macro .563 (.503); all F .502 (.474) macro .721 (.694). **SWA**: mitbih F .440 (.411), but all F −.009 / incart F −.081 | ✅ **PASSES sentinel** (best-ep improves 213-F + 232-S, N/V not down). V1-residual kept. SWA mixed — full 5-fold will decide. |
 | 08-31 | **MultiPath rung 2 sentinel** (`--v1 --rhythm`) | + rhythm MLP → S-specialist (residual on z_S) | **best-ep**: mitbih F **.564** (flat .443, R1b .461) · S **.274** (.032) · macro **.626** (.503) ; all macro **.750** (.694). **SWA**: S huge (mitbih .16→.41) but F tanked (.44→.34) | ✅ **PASSES sentinel (best-epoch)** — big clean win on 213-F + 232-S. Rhythm S-specialist KEPT. SWA window was too wide (0.6E) → narrowed to 0.8E for rung 3+. |
-| 08-31 | **MultiPath rung 3 sentinel** (`--v1 --rhythm --grl`) | + conditional GRL record adversary on e_morph, λ 0→0.2 | — | 🔄 **RUNNING** (PID 198) |
-| 08-31 | **MultiPath rung 3b sentinel** (`--v1 --rhythm --loss balanced`) | balanced-softmax on the flat 5-way head, on top of confirmed rung 2 | — | 🔄 **RUNNING in parallel** (PID 270, AMP) |
+| 08-31 | **MultiPath rung 3 sentinel** (`--v1 --rhythm --grl`) | + conditional GRL record adversary, λ 0→0.2 | best-ep mitbih F **.089** (R2 .564), V .718 (.847) | ❌ **Rejected.** GRL scrubs F-relevant morphology out of e_morph. De-confounding left to INCART diversity + LOPO holdout. |
+| 08-31 | **MultiPath rung 3b sentinel** (`--v1 --rhythm --loss balanced`) | balanced-softmax on the 5-way head | best-ep mitbih S **.559** (R2 .274) but F **.285** (.564), N **.615** (.817) | ❌ **Rejected as a stack** — trades F+N for S. On record if framing shifts to "maximize S". |
+| 08-31 | **AMP + parallel training** | mixed precision both trainers; 2 jobs concurrent (16 cores, RAM ok) | rung 3 + 3b ran in parallel, ~1.5× throughput | ✅ adopted |
 | 08-29 | **LOPO harness + sentinel fold** | `preprocess_lopo.py` + `train_lopo_cv.py` (`--mode kfold|sentinel`, per-fold norm, inner-val selection on {S,V,F}, SWA, by-DB). Protocol locked in `docs/LOPO_PROTOCOL.md`. | — | ✅ **built** (helper tests pass); needs 1-fold GPU smoke + wall-time benchmark |
 | — | HMR-MultiPath rung 0 (`flat` sentinel + LOPO) | plain trunk, reference distribution | — | ⏸ next after hier_ba |
 | — | HMR-MultiPath rung 1 (V1 + F-specialist) | attacks B4/B3 | — | ⏸ not built |
