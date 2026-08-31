@@ -193,6 +193,7 @@ Status: ✅ kept / ❌ rejected / 🔄 running / ⏸ built-not-run
 | 08-31 | **MultiPath rung 1b sentinel** (`--v1`, *residual*) | `z_F = shared_F + f_corr` (zero-init) | **best-ep**: mitbih F **.461** (flat .443) S **.178** (.032) macro .563 (.503); all F .502 (.474) macro .721 (.694). **SWA**: mitbih F .440 (.411), but all F −.009 / incart F −.081 | ✅ **PASSES sentinel** (best-ep improves 213-F + 232-S, N/V not down). V1-residual kept. SWA mixed — full 5-fold will decide. |
 | 08-31 | **MultiPath rung 2 sentinel** (`--v1 --rhythm`) | + rhythm MLP → S-specialist (residual on z_S) | **best-ep**: mitbih F **.564** (flat .443, R1b .461) · S **.274** (.032) · macro **.626** (.503) ; all macro **.750** (.694). **SWA**: S huge (mitbih .16→.41) but F tanked (.44→.34) | ✅ **PASSES sentinel (best-epoch)** — big clean win on 213-F + 232-S. Rhythm S-specialist KEPT. SWA window was too wide (0.6E) → narrowed to 0.8E for rung 3+. |
 | 08-31 | **MultiPath rung 3 sentinel** (`--v1 --rhythm --grl`) | + conditional GRL record adversary on e_morph, λ 0→0.2 | — | 🔄 **RUNNING** (PID 198) |
+| 08-31 | **MultiPath rung 3b sentinel** (`--v1 --rhythm --loss balanced`) | balanced-softmax on the flat 5-way head, on top of confirmed rung 2 | — | 🔄 **RUNNING in parallel** (PID 270, AMP) |
 | 08-29 | **LOPO harness + sentinel fold** | `preprocess_lopo.py` + `train_lopo_cv.py` (`--mode kfold|sentinel`, per-fold norm, inner-val selection on {S,V,F}, SWA, by-DB). Protocol locked in `docs/LOPO_PROTOCOL.md`. | — | ✅ **built** (helper tests pass); needs 1-fold GPU smoke + wall-time benchmark |
 | — | HMR-MultiPath rung 0 (`flat` sentinel + LOPO) | plain trunk, reference distribution | — | ⏸ next after hier_ba |
 | — | HMR-MultiPath rung 1 (V1 + F-specialist) | attacks B4/B3 | — | ⏸ not built |
@@ -261,8 +262,15 @@ LR, FGSM adv-training, epochs=45, patience=15)**
   referral story for the paper).
 
 **Machine constraints**
-- 4 GB GPU, 14 GB RAM. **One training job at a time.** ~11–15 min/epoch.
-- Machine reboots intermittently → all trainers must checkpoint per epoch and resume.
+- RTX 3050 Ti Laptop **4 GB GPU**, **13.9 GB RAM** (2×8GB, 2/2 slots, max 32).
+  512 GB NVMe SSD (C/D/E = partitions of one disk).
+- ~10–13 min/epoch on the LOPO pool (25 ep = ~3.3 h/sentinel-fold).
+- **AMP (mixed precision) is on** in both LOPO trainers (`--amp 1` default) — frees
+  VRAM headroom. With 16 logical cores and GPU ~20% util, **two training jobs run
+  in parallel** when RAM allows (each ≈ 1.8 GB RAM, ≈ 0.5 GB VRAM). Keep ≥ 3 GB
+  RAM free; enlarge the pagefile (48 GB on D:) as the OOM safety net.
+- Machine reboots intermittently → all trainers checkpoint per epoch and resume
+  (scaler state included, absent-key tolerant).
 - Git Bash: use `ps -W` (not `tasklist`) to check if a Windows PID is alive.
 
 ---
