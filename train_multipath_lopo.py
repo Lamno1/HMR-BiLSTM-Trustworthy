@@ -31,7 +31,7 @@ from hmr_multipath import HMRMultiPath, MultiPathLoss
 from train_inter_patient import CONFIG, set_seed, cosine_lr
 from train_lopo_cv import (
     POOL, RECMETA, SENTINEL_TEST, CLASS_NAMES,
-    assign_folds, carve_inner_val, per_source_zscore, score, class_weights,
+    assign_folds, carve_inner_val, carve_conformal_s_cal, per_source_zscore, score, class_weights,
 )
 
 if sys.stdout.encoding and sys.stdout.encoding.lower() != "utf-8":
@@ -54,17 +54,24 @@ def rr_zscore(rr, src, stats=None):
 
 
 @torch.no_grad()
-def predict_mp(model, X, X2, RR, device, bs=512, amp=True):
+def predict_mp_logits(model, X, X2, RR, device, bs=512, amp=True):
+    """Return pre-softmax logits in input order for post-hoc decision analysis."""
     model.eval()
     out = []
     for i in range(0, len(X), bs):
         sl = slice(i, i + bs)
         with torch.cuda.amp.autocast(enabled=amp and device.type == "cuda"):
-            p = model(torch.from_numpy(X[sl]).to(device),
-                      torch.from_numpy(X2[sl]).to(device),
-                      torch.from_numpy(RR[sl]).to(device)).argmax(-1)
-        out.append(p.cpu().numpy())
+            logits = model(torch.from_numpy(X[sl]).to(device),
+                           torch.from_numpy(X2[sl]).to(device),
+                           torch.from_numpy(RR[sl]).to(device))
+        # float32 on the way out: AMP emits fp16 logits, but P2 calibration and
+        # conformal quantiles must not be fp16-quantised.
+        out.append(logits.float().cpu().numpy())
     return np.concatenate(out)
+
+
+def predict_mp(model, X, X2, RR, device, bs=512, amp=True):
+    return predict_mp_logits(model, X, X2, RR, device, bs=bs, amp=amp).argmax(-1)
 
 
 def fgsm_primary(model, xb, x2b, rrb, yb, eps, amp=True):
@@ -89,7 +96,7 @@ def recompute_bn(model, loader, device):
 
 def train_fold(fold, idx, data, device, args, ckpt_dir):
     X, X2, y, RR, record, source = data
-    tr_i, va_i, te_i = idx
+    tr_i, va_i, te_i, tu_i, ca_i = idx
     Xtr, st = per_source_zscore(X[tr_i], source[tr_i])
     Xva, _ = per_source_zscore(X[va_i], source[va_i], st)
     Xte, _ = per_source_zscore(X[te_i], source[te_i], st)
@@ -99,6 +106,12 @@ def train_fold(fold, idx, data, device, args, ckpt_dir):
     RRtr, rst = rr_zscore(RR[tr_i], source[tr_i])
     RRva, _ = rr_zscore(RR[va_i], source[va_i], rst)
     RRte, _ = rr_zscore(RR[te_i], source[te_i], rst)
+    Xtu, _ = per_source_zscore(X[tu_i], source[tu_i], st)
+    Xca, _ = per_source_zscore(X[ca_i], source[ca_i], st)
+    X2tu, _ = per_source_zscore(X2[tu_i], source[tu_i], st2)
+    X2ca, _ = per_source_zscore(X2[ca_i], source[ca_i], st2)
+    RRtu, _ = rr_zscore(RR[tu_i], source[tu_i], rst)
+    RRca, _ = rr_zscore(RR[ca_i], source[ca_i], rst)
     ytr, yva, yte = y[tr_i], y[va_i], y[te_i]
     rec_tr = record[tr_i]
 
@@ -144,7 +157,9 @@ def train_fold(fold, idx, data, device, args, ckpt_dir):
     swa_start = int(args.epochs * 0.8)
     swa_sum, swa_n = None, 0
     tag = f"{'v' if args.v1 else ''}{'r' if args.rhythm else ''}{'g' if args.grl else ''}{args.loss}"
-    state_path = ckpt_dir / f"mp_{tag}_fold{fold}_state.pt"
+    # A checkpoint is state for one *seeded* optimization trajectory.  Omitting
+    # the seed silently made a later seed resume the earlier one.
+    state_path = ckpt_dir / f"mp_{tag}_fold{fold}_seed{args.seed}_state.pt"
     start_ep, best_v, best_state = 1, -1.0, None
     if state_path.exists():
         stt = torch.load(state_path, map_location="cpu", weights_only=False)
@@ -206,7 +221,11 @@ def train_fold(fold, idx, data, device, args, ckpt_dir):
            "train_time_sec": time.time() - t0,
            "n_params": sum(p.numel() for p in model.parameters())}
     model.load_state_dict(best_state)
-    res["best_epoch_model"] = score(yte, predict_mp(model, Xte, X2te, RRte, device, amp=use_amp), source[te_i])
+    te_logits = predict_mp_logits(model, Xte, X2te, RRte, device, amp=use_amp)
+    va_logits = predict_mp_logits(model, Xva, X2va, RRva, device, amp=use_amp)
+    tu_logits = predict_mp_logits(model, Xtu, X2tu, RRtu, device, amp=use_amp)
+    ca_logits = predict_mp_logits(model, Xca, X2ca, RRca, device, amp=use_amp)
+    res["best_epoch_model"] = score(yte, te_logits.argmax(-1), source[te_i])
     if swa_n > 0:
         swa_model = copy.deepcopy(model)
         swa_model.load_state_dict(best_state)          # start from best (gets all buffers)
@@ -215,10 +234,47 @@ def train_fold(fold, idx, data, device, args, ckpt_dir):
                 if k in swa_sum:
                     p.copy_((swa_sum[k] / swa_n).to(device))
         recompute_bn(swa_model, dl, device)
-        sp2 = predict_mp(swa_model, Xte, X2te, RRte, device, amp=use_amp)
+        swa_te_logits = predict_mp_logits(swa_model, Xte, X2te, RRte, device, amp=use_amp)
+        sp2 = swa_te_logits.argmax(-1)
         res["swa_model"] = score(yte, sp2, source[te_i])
         print(classification_report(yte, sp2, labels=[0, 1, 2, 3],
                                     target_names=["N", "S", "V", "F"], zero_division=0, digits=4))
+    # Keep the artifact independent of the data pool ordering.  RR is raw
+    # (pre-z-score) so downstream code can audit every transform; logits are
+    # from the fold-specific normalisation above.
+    artifact_dir = Path(args.out_dir)
+    artifact_dir.mkdir(parents=True, exist_ok=True)
+    artifact_path = artifact_dir / f"fold{fold}_seed{args.seed}_{tag}_preds.npz"
+    meta = {
+        "fold": fold, "seed": args.seed, "tag": tag, "tuning_split": "inner_val",
+        "best_inner_val_svf": float(best_v),
+        "train_indices": tr_i.tolist(), "val_indices": va_i.tolist(), "test_indices": te_i.tolist(),
+        "tuning_indices": tu_i.tolist(), "conformal_cal_indices": ca_i.tolist(),
+        "x_zscore": {str(k): [float(v[0]), float(v[1])] for k, v in st.items()},
+        "x2_zscore": {str(k): [float(v[0]), float(v[1])] for k, v in st2.items()},
+        "rr_zscore": {str(k): [np.asarray(v[0]).tolist(), np.asarray(v[1]).tolist()] for k, v in rst.items()},
+    }
+    payload = {
+        "te_logits": te_logits, "te_y": yte, "te_record": record[te_i], "te_source": source[te_i],
+        "te_rr_raw": RR[te_i], "te_pred": te_logits.argmax(-1),
+        "va_logits": va_logits, "va_y": yva, "va_record": record[va_i], "va_source": source[va_i],
+        "va_rr_raw": RR[va_i], "va_pred": va_logits.argmax(-1),
+        "tuning_logits": tu_logits, "tuning_y": y[tu_i], "tuning_record": record[tu_i],
+        "tuning_source": source[tu_i], "tuning_rr_raw": RR[tu_i], "tuning_pred": tu_logits.argmax(-1),
+        "conformal_cal_logits": ca_logits, "conformal_cal_y": y[ca_i], "conformal_cal_record": record[ca_i],
+        "conformal_cal_source": source[ca_i], "conformal_cal_rr_raw": RR[ca_i],
+        "conformal_cal_pred": ca_logits.argmax(-1),
+        "meta_json": np.array(json.dumps(meta)),
+    }
+    if swa_n > 0:
+        payload["swa_te_logits"] = swa_te_logits
+    np.savez_compressed(artifact_path, **payload)
+    model_path = artifact_dir / f"fold{fold}_seed{args.seed}_{tag}_model.pt"
+    torch.save({"model_state": best_state, "fold": fold, "seed": args.seed, "tag": tag,
+                "config": {"use_v1": args.v1, "use_rhythm": args.rhythm, "use_grl": args.grl,
+                           "rr_dim": int(RR.shape[1])}}, model_path)
+    res["prediction_artifact"] = str(artifact_path)
+    res["model_artifact"] = str(model_path)
     return res
 
 
@@ -268,6 +324,10 @@ def main():
     ap.add_argument("--seeds", nargs="*", type=int, default=None)
     ap.add_argument("--fold-seed", type=int, default=0)
     ap.add_argument("--inner-val-frac", type=float, default=0.15)
+    ap.add_argument("--tuning-frac", type=float, default=0.0,
+                    help="Deprecated: tuning is the inner-val split; no extra records are held out.")
+    ap.add_argument("--conformal-cal-frac", type=float, default=0.15,
+                    help="Record fraction held out exclusively for conformal/risk calibration.")
     ap.add_argument("--train-n-cap", type=int, default=35000)
     ap.add_argument("--amp", type=int, default=1, help="1=mixed precision (CUDA), 0=fp32")
     ap.add_argument("--folds", nargs="*", type=int, default=None)
@@ -287,7 +347,13 @@ def main():
     print(f"Device: {device}  tag: {tag}")
 
     if args.mode == "sentinel":
-        idx = build_sentinel_idx(record, rec_cls, rec_src, args)
+        tr_i, va_i, te_i = build_sentinel_idx(record, rec_cls, rec_src, args)
+        # Sentinel is screening only; still make the decision splits explicit.
+        tr_records = sorted(set(record[tr_i].tolist()))
+        conformal = carve_conformal_s_cal(tr_records, rec_cls, args.conformal_cal_frac, args.fold_seed + 200)
+        train = set(tr_records) - conformal
+        idx = (np.where(np.isin(record, list(train)))[0], va_i, te_i,
+               va_i, np.where(np.isin(record, list(conformal)))[0])
         res = train_fold("sentinel", idx, data, device, args, ckpt)
         json.dump(res, open(out_dir / f"sentinel_{tag}.json", "w"), indent=2)
         print(f"\n[BENCHMARK] one fold ({args.epochs} ep) = {res['train_time_sec']/60:.0f} min")
@@ -313,9 +379,14 @@ def main():
             te = set(fr[f]); trval = [r for r in fold_of if r not in te]
             va = carve_inner_val(trval, rec_cls, rec_src, args.inner_val_frac, args.fold_seed + f)
             tr = set(trval) - va
-            idx = (np.where(np.isin(record, list(tr)))[0],
+            conformal = carve_conformal_s_cal(sorted(tr), rec_cls, args.conformal_cal_frac,
+                                               args.fold_seed + 2000 + f)
+            train = tr - conformal
+            idx = (np.where(np.isin(record, list(train)))[0],
                    np.where(np.isin(record, list(va)))[0],
-                   np.where(np.isin(record, list(te)))[0])
+                   np.where(np.isin(record, list(te)))[0],
+                   np.where(np.isin(record, list(va)))[0],
+                   np.where(np.isin(record, list(conformal)))[0])
             print(f"\n{'='*70}\n  FOLD {f} SEED {seed}\n{'='*70}")
             res = train_fold(f, idx, data, device, args, ckpt)
             json.dump(res, open(rp, "w"), indent=2)

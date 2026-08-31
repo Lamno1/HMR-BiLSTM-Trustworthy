@@ -6,7 +6,7 @@
 > Update the **CURRENT STEP** block and the **EXPERIMENT LOG** table after every run.
 > Source of truth for individual run numbers = the JSON files under `results/`.
 
-Last updated: **2026-08-29** (HD ladder step 2b `hier_ba` running; `hier` and `hier_la` both rejected).
+Last updated: **2026-08-31** (two-layer classifier + selective-decision plan locked; P0 instrumentation in progress, no full LOPO run launched).
 
 ---
 
@@ -23,19 +23,44 @@ Last updated: **2026-08-29** (HD ladder step 2b `hier_ba` running; `hier` and `h
   `F1_F = 0.241`. The model can rank F beats; it can't commit the argmax.
 - ~25 architecture/loss experiments over ~2 weeks all lost to the plain baseline.
   Full dead-end list in §5.
-- Current strategy: **HMR-BiLSTM-HD** — a 4-part architecture change aimed at the
-  measured causes (§3), run as an ablation ladder (§4).
+- Current classifier strategy: **HMR-MultiPath R2** (`--v1 --rhythm`), selected by
+  sentinel screening. Its 5-fold, 2-seed LOPO validation is still required.
 - Realistic target: **F1-F 0.35–0.50, F1-S 0.45–0.62, STABLE** (mean up AND seed
   variance down). Not 0.6+. Fusion beats have a real Bayes-error ceiling.
-- Fallback (user directive): if the HD ladder fails on HMR-BiLSTM, port the same
-  ideas to an updated DSTA (`dsta_*.py`, `camp_net*.py`).
+- The paper has two stacked layers: (1) classifier probabilities for every beat;
+  (2) a selective decision layer that calibrates them and either auto-decides or
+  refers. Full-coverage F1 is the classifier floor, not the trust headline.
+- Trust target: report class-conditional auto-coverage and auto-precision for S/F.
+  A precision target only counts with non-trivial coverage; it does not claim that
+  all F beats can reach F1 0.8–0.9.
 
 ---
 
-## 1. CURRENT STEP  (session handoff 2026-08-31 ~19:00 — sentinel screening DONE)
+## 1. CURRENT STEP  (session handoff 2026-08-31 — P0 instrumentation)
 
 **All MultiPath sentinel rungs screened. Final stack = `--v1 --rhythm` (R2).**
-No jobs running. New session picks up at "NEXT" below.
+No training job is running. Do not launch the full LOPO run until P0's artifact
+contract and two-seed smoke test pass.
+
+**P0 run note (2026-08-31):** a one-epoch R2 smoke launch reached fold-0 training
+on CUDA but was terminated externally before the first epoch/checkpoint; it
+produced no JSON/NPZ/model artifact and is **not evidence**. Re-run the smoke in
+an interactive/persistent terminal before P1.
+
+**P0 CPU split preflight (2026-08-31):** S conformal-cal has 8 F-free/S-bearing
+records in every fold, with 174 / 680 / 1566 / 1741 / 400 S beats (folds 0–4).
+Inner-val F beats are 25 / 71 / 18 / 25 / 400; their largest-record shares are
+56% / 79% / 61% / 72% / 93%. Thus no fold supplies patient-diverse F calibration:
+folds 0, 2, and 3 are absolutely small, while fold 4's 400 beats are 93% one
+record. Do not treat duplicate predictions from two seeds as additional
+calibration samples. They may form an ensemble prediction, but they do not
+increase patient/beat evidence. P2-F therefore reports outer-test
+risk--coverage frontiers per fold and pooled as descriptive results, not a
+per-fold calibrated/guaranteed threshold. Do not use a pooled-inner-val F
+operating point in the abstract or conclusion: its beats repeat records across
+outer folds and it is not patient-independent. An illustrative
+clinician-selectable point may appear only on the frontier figure, explicitly
+without a guarantee claim.
 
 **Full sentinel ladder** (test = held-out MIT-BIH 213-F + 232-S; best-epoch model,
 SWA in parens; `results/{lopo_cv,mp_lopo}/sentinel_*.json`):
@@ -62,21 +87,67 @@ Notes:
 - balanced-softmax: if the paper's framing later shifts to "maximize S, defer F",
   R3b is on record (232-S 0.56) — but not the default.
 
-**NEXT (new session):**
-1. **Full 5-fold LOPO, 2 seeds, on R2** (`--v1 --rhythm`) — the real validation:
+**Two-layer / four-block plan (locked):**
+
+| Phase | Deliverable | Gate |
+|---|---|---|
+| P0 | Per-fold logits/model artifacts, correct seed-resume behavior, flat two-seed runner, selective metrics, smoke test | Must pass before GPU-scale P1 |
+| P1 | R2 and flat full 5-fold LOPO, two independent seeds | Compare mean **and** seed/fold spread |
+| P2 | Nested calibration/referral analysis; Mondrian sets; RCPS only where calibration count supports it | S is primary guarantee candidate; F is descriptive unless its bound is meaningful |
+| P3 | DS1/DS2 R2 3-seed, ablations, paper revision | Uses P1/P2 evidence only |
+
+**P0 implementation notes:**
+- Save best-epoch logits (and SWA logits for ablation), labels, record/source,
+  raw RR, normalisation metadata, and a model-state artifact for each `(fold, seed, tag)`.
+- To protect the classifier's tiny F-record pool, **inner-val is also the tuning
+  split** for calibration/referral-score fitting. A separate conformal-cal split
+  is carved randomly from S-bearing, F-free records (default 15% of records).
+  Therefore S can receive a split-conformal *nominal guarantee under the usual
+  exchangeability assumption* if its count supports it; LOPO's patient shift
+  makes realized outer-fold coverage versus nominal coverage the actual evidence.
+  F is per-fold descriptive in this paper iteration, not guaranteed.
+- Checkpoint filenames **must include seed**. Previously, a seed-123 run could
+  silently resume seed-42's checkpoint and falsify the variance result.
+- `train_lopo_cv.py` needs `--seeds` matching MultiPath so flat and R2 have the
+  same independent-run protocol.
+- `selective/metrics.py` must keep denominators explicit: auto-coverage is
+  `P(accept | Y=c)`, while auto-precision is `P(Y=c | accept, prediction=c)`.
+- MC-dropout is post-hoc inference from saved models, optional and never a reason
+  to re-run P1.
+
+**P1 commands after P0 smoke succeeds — ONE GPU job at a time (LOPO_PROTOCOL.md):**
+1. **Full 5-fold LOPO, 2 seeds, on R2** (`--v1 --rhythm`) — the real validation.
+   One process; it loops folds×seeds internally. Do NOT split with `--folds` for
+   parallelism — the 4 GB GPU runs a single trainer at a time.
    ```
-   python train_multipath_lopo.py --mode kfold --v1 --rhythm --k 5 --seeds 42 123 --folds 0 1 2
-   python train_multipath_lopo.py --mode kfold --v1 --rhythm --k 5 --seeds 42 123 --folds 3 4
+   python -u train_multipath_lopo.py --mode kfold --v1 --rhythm --k 5 --epochs 25 --seeds 42 123 --out-dir results/mp_lopo
    ```
-   (two parallel procs; AMP on; ~16.5 h/seed total, resumable per fold). Writes
-   `results/mp_lopo/fold{f}_seed{s}_vrce.json`; `--summarize-only`-style read via
-   `train_multipath_lopo.summarize`. **Success = per-fold F1-F/F1-S mean ↑ vs the
-   flat baseline AND std small** (that is the whole point — not a single number).
-2. **Full 5-fold LOPO flat baseline** for the comparison:
-   `python train_lopo_cv.py --arch flat --k 5 --epochs 25` (also splittable via `--folds`).
-3. DS1/DS2 3-seed of R2 for the literature table — needs a MLII+V1 loader on the
+   Then, only after (1) finishes:
+   ```
+   python -u train_lopo_cv.py --arch flat --k 5 --epochs 25 --seeds 42 123 --out-dir results/lopo_cv
+   ```
+   AMP on; resumable per (fold, seed); ~3 days GPU wall total for both runs.
+   Writes `fold{f}_seed{s}_{tag}.json` + `fold{f}_seed{s}_{tag}_preds.npz` +
+   `_model.pt`. **Success = per-fold F1-F/F1-S mean ↑ vs the flat baseline AND
+   std small** (that is the whole point — not a single number).
+2. **P2 protocol, after P1 only:** inner-val is the tuning split (calibration +
+   referral-score fitting); the conformal-cal split (S-bearing, F-free records) is
+   distinct and never touched until the decision function is frozen; never tune
+   anything on outer test. Use per-fold Mondrian sets
+   as the first decision rule and show the alpha/coverage curve. Do **not** call a
+   simple pool of residuals from five outer models “grouped CV+” or claim a
+   patient-level guarantee from it. RCPS is supplementary and only for groups
+   with enough independent calibration examples; report per-fold spread and the
+   patient-exchangeability limitation in all cases.
+3. **P2-F is frontier-only.** Every fold's inner-val F is 56–93 % one record
+   (25/71/18/25/400 beats), so no patient-diverse F threshold calibration is
+   possible. Report outer-test F risk–coverage frontiers per fold and pooled as
+   descriptive results. No pooled-inner-val F operating point in the abstract or
+   conclusion. An illustrative clinician-selectable point may appear only on the
+   frontier figure, without a guarantee claim.
+4. DS1/DS2 3-seed of R2 for the literature table — needs a MLII+V1 loader on the
    official split (§6; INCART not involved there, V1 = `p_signal[:,1]`).
-4. Ablation table (flat / +V1 / +rhythm) + paper write-up (plan § D-E).
+5. Ablation table (flat / +V1 / +rhythm) + paper write-up (plan § D-E).
 
 **Everything BUILT & committed**: `hmr_multipath.py`, `train_multipath_lopo.py`,
 `train_lopo_cv.py` (+AMP), `validation/preprocess_lopo.py` v2, `docs/LOPO_PROTOCOL.md`.
@@ -278,9 +349,10 @@ LR, FGSM adv-training, epochs=45, patience=15)**
   512 GB NVMe SSD (C/D/E = partitions of one disk).
 - ~10–13 min/epoch on the LOPO pool (25 ep = ~3.3 h/sentinel-fold).
 - **AMP (mixed precision) is on** in both LOPO trainers (`--amp 1` default) — frees
-  VRAM headroom. With 16 logical cores and GPU ~20% util, **two training jobs run
-  in parallel** when RAM allows (each ≈ 1.8 GB RAM, ≈ 0.5 GB VRAM). Keep ≥ 3 GB
-  RAM free; enlarge the pagefile (48 GB on D:) as the OOM safety net.
+  VRAM headroom. Small sentinel jobs were run two-in-parallel earlier, but **P1
+  runs ONE trainer at a time** (LOPO_PROTOCOL.md; full-fold jobs are heavier than
+  sentinel). Keep ≥ 3 GB RAM free; enlarge the pagefile (48 GB on D:) as the OOM
+  safety net.
 - Machine reboots intermittently → all trainers checkpoint per epoch and resume
   (scaler state included, absent-key tolerant).
 - Git Bash: use `ps -W` (not `tasklist`) to check if a Windows PID is alive.

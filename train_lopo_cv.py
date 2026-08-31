@@ -106,6 +106,26 @@ def carve_inner_val(train_rids, rec_cls, rec_src, frac, seed):
     return set(val)
 
 
+def carve_conformal_s_cal(train_rids, rec_cls, frac, seed):
+    """Carve a record-disjoint S calibration set without removing F records.
+
+    F has too few records to spend on a formal calibration split in P1.  The
+    first paper iteration therefore makes a formal conformal claim for S only;
+    F selective results remain descriptive.  Selecting only S-bearing,
+    F-free records protects rare-F classifier training and keeps the calibration
+    population explicit rather than quietly reusing the model-selection split.
+    """
+    if not 0 < frac < 1:
+        raise ValueError("conformal calibration fraction must be in (0, 1)")
+    rng = np.random.default_rng(seed)
+    candidates = [r for r in train_rids if rec_cls[r][1] > 0 and rec_cls[r][3] == 0]
+    if len(candidates) < 2:
+        raise ValueError("need at least two S-bearing, F-free records for conformal calibration")
+    rng.shuffle(candidates)
+    n_target = max(2, int(round(frac * len(train_rids))))
+    return set(candidates[:min(n_target, len(candidates))])
+
+
 # --------------------------------------------------------------------------- norm
 def per_source_zscore(X, src, stats=None):
     """X (N,187,1), src (N,). stats = {0:(m,s), 1:(m,s)} fit on train if None."""
@@ -124,12 +144,20 @@ def per_source_zscore(X, src, stats=None):
 
 # --------------------------------------------------------------------------- eval
 @torch.no_grad()
-def predict(model, X, device, bs=512):
+def predict_logits(model, X, device, bs=512, amp=True):
+    """Return pre-softmax logits in input order for post-hoc selective metrics."""
     model.eval()
     out = []
     for i in range(0, len(X), bs):
-        out.append(model(torch.from_numpy(X[i:i + bs]).to(device)).argmax(-1).cpu().numpy())
+        with torch.cuda.amp.autocast(enabled=amp and device.type == "cuda"):
+            logits = model(torch.from_numpy(X[i:i + bs]).to(device))
+        # float32 out: AMP emits fp16, P2 calibration/conformal must not be fp16.
+        out.append(logits.float().cpu().numpy())
     return np.concatenate(out)
+
+
+def predict(model, X, device, bs=512, amp=True):
+    return predict_logits(model, X, device, bs=bs, amp=amp).argmax(-1)
 
 
 def score(y, p, src):
@@ -152,11 +180,13 @@ def class_weights(y, k=5):
     return torch.from_numpy(np.clip(c.sum() / (k * c), 0.5, 50.0).astype(np.float32))
 
 
-def train_fold(fold, idx, X, y, src, rr, device, args, ckpt_dir):
-    tr_i, va_i, te_i = idx
+def train_fold(fold, idx, X, y, src, rr, record, device, args, ckpt_dir):
+    tr_i, va_i, te_i, tu_i, ca_i = idx
     Xtr, Xtr_stats = per_source_zscore(X[tr_i], src[tr_i])
     Xva, _ = per_source_zscore(X[va_i], src[va_i], Xtr_stats)
     Xte, _ = per_source_zscore(X[te_i], src[te_i], Xtr_stats)
+    Xtu, _ = per_source_zscore(X[tu_i], src[tu_i], Xtr_stats)
+    Xca, _ = per_source_zscore(X[ca_i], src[ca_i], Xtr_stats)
     ytr, yva, yte = y[tr_i], y[va_i], y[te_i]
 
     # subsample train N to keep per-epoch cost ~ DS1
@@ -188,7 +218,8 @@ def train_fold(fold, idx, X, y, src, rr, device, args, ckpt_dir):
 
     swa_model = AveragedModel(model)
     swa_start = int(args.epochs * 0.6)
-    state_path = ckpt_dir / f"lopo_{args.arch}_fold{fold}_state.pt"
+    # Do not let a later seed resume a checkpoint from a different trajectory.
+    state_path = ckpt_dir / f"lopo_{args.arch}_fold{fold}_seed{args.seed}_state.pt"
     start_ep, best_v, best_state, n_swa = 1, -1.0, None, 0
     if state_path.exists():
         st = torch.load(state_path, map_location="cpu", weights_only=False)
@@ -243,20 +274,54 @@ def train_fold(fold, idx, X, y, src, rr, device, args, ckpt_dir):
 
     # best-epoch model
     model.load_state_dict(best_state)
-    res["best_epoch_model"] = score(yte, predict(model, Xte, device), src[te_i])
+    te_logits = predict_logits(model, Xte, device, amp=use_amp)
+    va_logits = predict_logits(model, Xva, device, amp=use_amp)
+    tu_logits = predict_logits(model, Xtu, device, amp=use_amp)
+    ca_logits = predict_logits(model, Xca, device, amp=use_amp)
+    res["best_epoch_model"] = score(yte, te_logits.argmax(-1), src[te_i])
     # SWA model (recompute BN stats on train)
     if n_swa > 0:
         update_bn(tr_dl, swa_model, device=device)
-        sp = predict(swa_model, Xte, device)
+        swa_te_logits = predict_logits(swa_model, Xte, device, amp=use_amp)
+        sp = swa_te_logits.argmax(-1)
         res["swa_model"] = score(yte, sp, src[te_i])
         print(classification_report(yte, sp, labels=[0, 1, 2, 3],
                                     target_names=["N", "S", "V", "F"], zero_division=0, digits=4))
+    artifact_dir = Path(args.out_dir)
+    artifact_dir.mkdir(parents=True, exist_ok=True)
+    artifact_path = artifact_dir / f"fold{fold}_seed{args.seed}_{args.arch}_preds.npz"
+    meta = {
+        "fold": fold, "seed": args.seed, "arch": args.arch, "tuning_split": "inner_val",
+        "best_inner_val_svf": float(best_v),
+        "train_indices": tr_i.tolist(), "val_indices": va_i.tolist(), "test_indices": te_i.tolist(),
+        "tuning_indices": tu_i.tolist(), "conformal_cal_indices": ca_i.tolist(),
+        "x_zscore": {str(k): [float(v[0]), float(v[1])] for k, v in Xtr_stats.items()},
+    }
+    payload = {
+        "te_logits": te_logits, "te_y": yte, "te_record": record[te_i], "te_source": src[te_i],
+        "te_rr_raw": rr[te_i], "te_pred": te_logits.argmax(-1),
+        "va_logits": va_logits, "va_y": yva, "va_record": record[va_i], "va_source": src[va_i],
+        "va_rr_raw": rr[va_i], "va_pred": va_logits.argmax(-1),
+        "tuning_logits": tu_logits, "tuning_y": y[tu_i], "tuning_record": record[tu_i],
+        "tuning_source": src[tu_i], "tuning_rr_raw": rr[tu_i], "tuning_pred": tu_logits.argmax(-1),
+        "conformal_cal_logits": ca_logits, "conformal_cal_y": y[ca_i], "conformal_cal_record": record[ca_i],
+        "conformal_cal_source": src[ca_i], "conformal_cal_rr_raw": rr[ca_i],
+        "conformal_cal_pred": ca_logits.argmax(-1),
+        "meta_json": np.array(json.dumps(meta)),
+    }
+    if n_swa > 0:
+        payload["swa_te_logits"] = swa_te_logits
+    np.savez_compressed(artifact_path, **payload)
+    model_path = artifact_dir / f"fold{fold}_seed{args.seed}_{args.arch}_model.pt"
+    torch.save({"model_state": best_state, "fold": fold, "seed": args.seed,
+                "arch": args.arch, "config": {"num_layers": 2}}, model_path)
+    res["prediction_artifact"] = str(artifact_path)
+    res["model_artifact"] = str(model_path)
     return res
 
 
 def summarize(out_dir, arch, k):
-    rows = [json.load(open(out_dir / f"fold_{i}.json"))
-            for i in range(k) if (out_dir / f"fold_{i}.json").exists()]
+    rows = [json.load(open(p)) for p in sorted(out_dir.glob(f"fold*_seed*_{arch}.json"))]
     if not rows:
         print("[summary] no folds done"); return
     print(f"\n{'='*88}\n  LOPO CV [{arch}]  --  {len(rows)}/{k} folds\n{'='*88}")
@@ -287,8 +352,14 @@ def main():
     ap.add_argument("--k", type=int, default=5)
     ap.add_argument("--epochs", type=int, default=25)
     ap.add_argument("--seed", type=int, default=42)
+    ap.add_argument("--seeds", nargs="*", type=int, default=None,
+                    help="Run independent seeded trajectories (default: --seed).")
     ap.add_argument("--fold-seed", type=int, default=0)
     ap.add_argument("--inner-val-frac", type=float, default=0.15)
+    ap.add_argument("--tuning-frac", type=float, default=0.0,
+                    help="Deprecated: tuning is the inner-val split; no extra records are held out.")
+    ap.add_argument("--conformal-cal-frac", type=float, default=0.15,
+                    help="Record fraction held out only for conformal/risk calibration.")
     ap.add_argument("--train-n-cap", type=int, default=35000)
     ap.add_argument("--amp", type=int, default=1, help="1=mixed precision (CUDA), 0=fp32")
     ap.add_argument("--folds", nargs="*", type=int, default=None)
@@ -318,13 +389,18 @@ def main():
         trval = [r for r in rec_cls if r not in te_recs]
         va_recs = carve_inner_val(trval, rec_cls, rec_src, args.inner_val_frac, args.fold_seed)
         tr_recs = set(trval) - va_recs
-        idx = (np.where(np.isin(record, list(tr_recs)))[0],
+        conformal_recs = carve_conformal_s_cal(sorted(tr_recs), rec_cls, args.conformal_cal_frac,
+                                               args.fold_seed + 200)
+        model_recs = tr_recs - conformal_recs
+        idx = (np.where(np.isin(record, list(model_recs)))[0],
                np.where(np.isin(record, list(va_recs)))[0],
-               np.where(np.isin(record, list(te_recs)))[0])
+               np.where(np.isin(record, list(te_recs)))[0],
+               np.where(np.isin(record, list(va_recs)))[0],
+               np.where(np.isin(record, list(conformal_recs)))[0])
         device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
         print(f"Device: {device}\n=== SENTINEL fold  test={sorted(SENTINEL_TEST)} ===")
         rp = out_dir / f"sentinel_{args.arch}.json"
-        res = train_fold("sentinel", idx, X, y, source, rr, device, args, ckpt_dir)
+        res = train_fold("sentinel", idx, X, y, source, rr, record, device, args, ckpt_dir)
         json.dump(res, open(rp, "w"), indent=2)
         print(f"\n[OK] {rp}")
         print(f"[BENCHMARK] one fold ({args.epochs} ep) = {res['train_time_sec']/60:.0f} min "
@@ -351,22 +427,30 @@ def main():
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
     print(f"Device: {device}")
     todo = args.folds if args.folds is not None else list(range(args.k))
-    for f in todo:
-        rp = out_dir / f"fold_{f}.json"
-        if rp.exists():
-            print(f"[skip] fold {f} done"); continue
-        te_recs = set(fold_recs[f])
-        trval_recs = [r for r in fold_of if r not in te_recs]
-        va_recs = carve_inner_val(trval_recs, rec_cls, rec_src, args.inner_val_frac,
-                                  args.fold_seed + f)
-        tr_recs = set(trval_recs) - va_recs
-        tr_i = np.where(np.isin(record, list(tr_recs)))[0]
-        va_i = np.where(np.isin(record, list(va_recs)))[0]
-        te_i = np.where(np.isin(record, list(te_recs)))[0]
-        print(f"\n{'='*70}\n  FOLD {f}  (test records: {sorted(te_recs)})\n{'='*70}")
-        res = train_fold(f, (tr_i, va_i, te_i), X, y, source, rr, device, args, ckpt_dir)
-        json.dump(res, open(rp, "w"), indent=2)
-        print(f"[OK] {rp}")
+    seeds = args.seeds or [args.seed]
+    for seed in seeds:
+        args.seed = seed
+        for f in todo:
+            rp = out_dir / f"fold{f}_seed{seed}_{args.arch}.json"
+            if rp.exists():
+                print(f"[skip] fold {f} seed {seed} done"); continue
+            te_recs = set(fold_recs[f])
+            trval_recs = [r for r in fold_of if r not in te_recs]
+            va_recs = carve_inner_val(trval_recs, rec_cls, rec_src, args.inner_val_frac,
+                                      args.fold_seed + f)
+            tr_recs = set(trval_recs) - va_recs
+            conformal_recs = carve_conformal_s_cal(sorted(tr_recs), rec_cls, args.conformal_cal_frac,
+                                                    args.fold_seed + 2000 + f)
+            model_recs = tr_recs - conformal_recs
+            tr_i = np.where(np.isin(record, list(model_recs)))[0]
+            va_i = np.where(np.isin(record, list(va_recs)))[0]
+            te_i = np.where(np.isin(record, list(te_recs)))[0]
+            tu_i = va_i  # tuning/calibration fits use inner-val; see protocol in the lab notebook.
+            ca_i = np.where(np.isin(record, list(conformal_recs)))[0]
+            print(f"\n{'='*70}\n  FOLD {f} SEED {seed}  (test records: {sorted(te_recs)})\n{'='*70}")
+            res = train_fold(f, (tr_i, va_i, te_i, tu_i, ca_i), X, y, source, rr, record, device, args, ckpt_dir)
+            json.dump(res, open(rp, "w"), indent=2)
+            print(f"[OK] {rp}")
     summarize(out_dir, args.arch, args.k)
 
 
