@@ -39,8 +39,18 @@ Last updated: **2026-08-31** (two-layer classifier + selective-decision plan loc
 ## 1. CURRENT STEP  (session handoff 2026-08-31 — P0 instrumentation)
 
 **All MultiPath sentinel rungs screened. Final stack = `--v1 --rhythm` (R2).**
-No training job is running. Do not launch the full LOPO run until P0's artifact
-contract and two-seed smoke test pass.
+
+**P0 DONE + committed** (`5f22ab4`, `0c89833`, `709ee30`): seeded checkpoints,
+`*_preds.npz` + `_model.pt` dump (float32), record-disjoint model-train /
+inner-val(=tuning) / conformal-cal(S-only) split, `selective/metrics.py`,
+`selective/run_p2.py`, `run_plan.py` driver, `validation/check_lopo_health.py`
++ `inspect_p0_artifacts.py`. Smoke: both trainers PASS 16/16.
+
+**To run the whole chain unattended:** `python -u run_plan.py` (own terminal).
+Stages: p1a_r2_lopo -> p1b_flat_lopo -> p2_selective -> [d1_ds12_r2 STUB] ->
+d2_v1_ablation. Resumable (`results/plan_state.json`); stops on a failed run,
+an abnormal health check, or the d1 stub. `validation/run_d1.py` still to be
+written (best done after P1 numbers are in).
 
 **P0 run note (2026-08-31):** a one-epoch R2 smoke launch reached fold-0 training
 on CUDA but was terminated externally before the first epoch/checkpoint; it
