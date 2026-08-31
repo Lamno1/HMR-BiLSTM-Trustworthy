@@ -54,21 +54,24 @@ def rr_zscore(rr, src, stats=None):
 
 
 @torch.no_grad()
-def predict_mp(model, X, X2, RR, device, bs=512):
+def predict_mp(model, X, X2, RR, device, bs=512, amp=True):
     model.eval()
     out = []
     for i in range(0, len(X), bs):
         sl = slice(i, i + bs)
-        out.append(model(torch.from_numpy(X[sl]).to(device),
-                         torch.from_numpy(X2[sl]).to(device),
-                         torch.from_numpy(RR[sl]).to(device)).argmax(-1).cpu().numpy())
+        with torch.cuda.amp.autocast(enabled=amp and device.type == "cuda"):
+            p = model(torch.from_numpy(X[sl]).to(device),
+                      torch.from_numpy(X2[sl]).to(device),
+                      torch.from_numpy(RR[sl]).to(device)).argmax(-1)
+        out.append(p.cpu().numpy())
     return np.concatenate(out)
 
 
-def fgsm_primary(model, xb, x2b, rrb, yb, eps):
+def fgsm_primary(model, xb, x2b, rrb, yb, eps, amp=True):
     xr = xb.clone().detach().requires_grad_(True)
-    logit = model(xr, x2b, rrb)
-    loss = F.cross_entropy(logit, yb)
+    with torch.cuda.amp.autocast(enabled=amp and xb.device.type == "cuda"):
+        logit = model(xr, x2b, rrb)
+        loss = F.cross_entropy(logit, yb)
     g = torch.autograd.grad(loss, xr)[0]
     return (xr + eps * g.sign()).detach()
 
@@ -127,6 +130,8 @@ def train_fold(fold, idx, data, device, args, ckpt_dir):
                          loss=args.loss, class_prior=prior if args.loss == "balanced" else None).to(device)
     opt = torch.optim.Adam(model.parameters(), lr=CONFIG["learning_rate"],
                            weight_decay=CONFIG["weight_decay"])
+    use_amp = args.amp and device.type == "cuda"
+    scaler = torch.cuda.amp.GradScaler(enabled=use_amp)
 
     dl = DataLoader(TensorDataset(torch.from_numpy(Xtr), torch.from_numpy(X2tr),
                                   torch.from_numpy(RRtr), torch.from_numpy(ytr),
@@ -146,6 +151,8 @@ def train_fold(fold, idx, data, device, args, ckpt_dir):
         model.load_state_dict(stt["model"]); opt.load_state_dict(stt["opt"])
         start_ep, best_v, best_state = stt["ep"] + 1, stt["best_v"], stt["best_state"]
         swa_sum, swa_n = stt["swa_sum"], stt["swa_n"]
+        if stt.get("scaler") is not None:
+            scaler.load_state_dict(stt["scaler"])
         print(f"  [resume] fold {fold} ep {start_ep}")
 
     t0 = time.time()
@@ -159,17 +166,20 @@ def train_fold(fold, idx, data, device, args, ckpt_dir):
             xb, x2b, rrb, yb, rcb = (t.to(device) for t in (xb, x2b, rrb, yb, rcb))
             sp = int(len(xb) * (1 - CONFIG["adv_ratio"]))
             if sp < len(xb):
-                xa = fgsm_primary(model, xb[sp:], x2b[sp:], rrb[sp:], yb[sp:], CONFIG["adv_epsilon"])
+                xa = fgsm_primary(model, xb[sp:], x2b[sp:], rrb[sp:], yb[sp:], CONFIG["adv_epsilon"], use_amp)
                 xb = torch.cat([xb[:sp], xa])
             opt.zero_grad()
-            logit, intr = model(xb, x2b, rrb, yb, grl_lambda=lam, return_internals=True)
-            loss, comp = crit(logit, yb, intr, rcb)
+            with torch.cuda.amp.autocast(enabled=use_amp):
+                logit, intr = model(xb, x2b, rrb, yb, grl_lambda=lam, return_internals=True)
+                loss, comp = crit(logit, yb, intr, rcb)
             if torch.isnan(loss):
                 continue
-            loss.backward()
+            scaler.scale(loss).backward()
+            scaler.unscale_(opt)
             torch.nn.utils.clip_grad_norm_(model.parameters(), CONFIG["grad_clip"])
-            opt.step()
-        vp = predict_mp(model, Xva, X2va, RRva, device)
+            scaler.step(opt)
+            scaler.update()
+        vp = predict_mp(model, Xva, X2va, RRva, device, amp=use_amp)
         v_svf = f1_score(yva, vp, labels=[1, 2, 3], average="macro", zero_division=0)
         if v_svf > best_v:
             best_v = v_svf
@@ -187,7 +197,8 @@ def train_fold(fold, idx, data, device, args, ckpt_dir):
               f"{'  <-- best' if v_svf == best_v else ''}{'  +swa' if ep >= swa_start else ''}")
         torch.save({"ep": ep, "model": model.state_dict(), "opt": opt.state_dict(),
                     "best_v": best_v, "best_state": best_state,
-                    "swa_sum": swa_sum, "swa_n": swa_n}, state_path)
+                    "swa_sum": swa_sum, "swa_n": swa_n,
+                    "scaler": scaler.state_dict() if use_amp else None}, state_path)
         if device.type == "cuda":
             torch.cuda.empty_cache()
 
@@ -195,7 +206,7 @@ def train_fold(fold, idx, data, device, args, ckpt_dir):
            "train_time_sec": time.time() - t0,
            "n_params": sum(p.numel() for p in model.parameters())}
     model.load_state_dict(best_state)
-    res["best_epoch_model"] = score(yte, predict_mp(model, Xte, X2te, RRte, device), source[te_i])
+    res["best_epoch_model"] = score(yte, predict_mp(model, Xte, X2te, RRte, device, amp=use_amp), source[te_i])
     if swa_n > 0:
         swa_model = copy.deepcopy(model)
         swa_model.load_state_dict(best_state)          # start from best (gets all buffers)
@@ -204,7 +215,7 @@ def train_fold(fold, idx, data, device, args, ckpt_dir):
                 if k in swa_sum:
                     p.copy_((swa_sum[k] / swa_n).to(device))
         recompute_bn(swa_model, dl, device)
-        sp2 = predict_mp(swa_model, Xte, X2te, RRte, device)
+        sp2 = predict_mp(swa_model, Xte, X2te, RRte, device, amp=use_amp)
         res["swa_model"] = score(yte, sp2, source[te_i])
         print(classification_report(yte, sp2, labels=[0, 1, 2, 3],
                                     target_names=["N", "S", "V", "F"], zero_division=0, digits=4))
@@ -258,6 +269,7 @@ def main():
     ap.add_argument("--fold-seed", type=int, default=0)
     ap.add_argument("--inner-val-frac", type=float, default=0.15)
     ap.add_argument("--train-n-cap", type=int, default=35000)
+    ap.add_argument("--amp", type=int, default=1, help="1=mixed precision (CUDA), 0=fp32")
     ap.add_argument("--folds", nargs="*", type=int, default=None)
     ap.add_argument("--out-dir", default="results/mp_lopo")
     args = ap.parse_args()

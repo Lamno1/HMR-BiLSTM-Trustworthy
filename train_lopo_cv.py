@@ -180,6 +180,8 @@ def train_fold(fold, idx, X, y, src, rr, device, args, ckpt_dir):
                      use_focal=True, focal_gamma=CONFIG["focal_gamma"])
     opt = torch.optim.Adam(model.parameters(), lr=CONFIG["learning_rate"],
                            weight_decay=CONFIG["weight_decay"])
+    use_amp = getattr(args, "amp", 1) and device.type == "cuda"
+    scaler = torch.cuda.amp.GradScaler(enabled=use_amp)
 
     tr_ds = TensorDataset(torch.from_numpy(Xtr), torch.from_numpy(ytr))
     tr_dl = DataLoader(tr_ds, batch_size=CONFIG["batch_size"], shuffle=True)
@@ -193,6 +195,8 @@ def train_fold(fold, idx, X, y, src, rr, device, args, ckpt_dir):
         model.load_state_dict(st["model"]); opt.load_state_dict(st["opt"])
         swa_model.load_state_dict(st["swa"]); n_swa = st["n_swa"]
         start_ep, best_v, best_state = st["ep"] + 1, st["best_v"], st["best_state"]
+        if st.get("scaler") is not None:
+            scaler.load_state_dict(st["scaler"])
         print(f"  [resume] fold {fold} ep {start_ep}")
 
     t0 = time.time()
@@ -208,13 +212,16 @@ def train_fold(fold, idx, X, y, src, rr, device, args, ckpt_dir):
                 xa = fgsm_attack_train(model, xb[split:], yb[split:], CONFIG["adv_epsilon"], crit)
                 xb = torch.cat([xb[:split], xa]); yb = torch.cat([yb[:split], yb[split:]])
             opt.zero_grad()
-            logit, internal = model(xb, return_internals=True)
-            loss, _ = crit(logit, yb, internal["r_fwd"], internal["r_bwd"])
+            with torch.cuda.amp.autocast(enabled=use_amp):
+                logit, internal = model(xb, return_internals=True)
+                loss, _ = crit(logit, yb, internal["r_fwd"], internal["r_bwd"])
             if torch.isnan(loss):
                 continue
-            loss.backward()
+            scaler.scale(loss).backward()
+            scaler.unscale_(opt)
             torch.nn.utils.clip_grad_norm_(model.parameters(), CONFIG["grad_clip"])
-            opt.step()
+            scaler.step(opt)
+            scaler.update()
         vp = predict(model, Xva, device)
         v_svf = f1_score(yva, vp, labels=[1, 2, 3], average="macro", zero_division=0)
         if v_svf > best_v:
@@ -226,7 +233,8 @@ def train_fold(fold, idx, X, y, src, rr, device, args, ckpt_dir):
               f"{'  <-- best' if v_svf == best_v else ''}{'  +swa' if ep >= swa_start else ''}")
         torch.save({"ep": ep, "model": model.state_dict(), "opt": opt.state_dict(),
                     "swa": swa_model.state_dict(), "n_swa": n_swa,
-                    "best_v": best_v, "best_state": best_state}, state_path)
+                    "best_v": best_v, "best_state": best_state,
+                    "scaler": scaler.state_dict() if use_amp else None}, state_path)
         if device.type == "cuda":
             torch.cuda.empty_cache()
 
@@ -282,6 +290,7 @@ def main():
     ap.add_argument("--fold-seed", type=int, default=0)
     ap.add_argument("--inner-val-frac", type=float, default=0.15)
     ap.add_argument("--train-n-cap", type=int, default=35000)
+    ap.add_argument("--amp", type=int, default=1, help="1=mixed precision (CUDA), 0=fp32")
     ap.add_argument("--folds", nargs="*", type=int, default=None)
     ap.add_argument("--out-dir", default="results/lopo_cv")
     ap.add_argument("--summarize-only", action="store_true")
