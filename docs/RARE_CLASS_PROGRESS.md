@@ -51,12 +51,19 @@ PID 1123, ~8 min/epoch, done ~08:45 2026-08-30).
 - `data/processed/lopo/pool.npz` **v2** — now carries `X2` (2nd lead: MIT-BIH
   precordial (V1 ×38/44), INCART V1; both high-passed; 0% zero-filled).
 
-**Sentinel `flat` reference, the bar every rung must beat** (best-epoch / SWA):
-`mitbih F1_F 0.443 / 0.411 · F1_S 0.032 / 0.163` ·
-`all F1_F 0.474 / 0.477 · F1_S 0.448 / 0.507 · N .92 · V .93/.95`
-232-S is the weakest point (SWA .16, best-ep .03) — rung 2 rhythm S-specialist
-targets it. SWA helps S/V/macro, slightly hurts the hardest F (213) — report both,
-let the full 5-fold decide.
+**Sentinel progression (best-epoch model — the primary read; SWA in parens):**
+
+| rung | mitbih F (213) | mitbih S (232) | mitbih macro | all macro |
+|---|---|---|---|---|
+| flat | 0.443 (.411) | 0.032 (.163) | 0.503 (.559) | 0.694 (.717) |
+| +V1 (R1b) | 0.461 (.440) | 0.178 (.169) | 0.563 (.566) | 0.721 (.714) |
+| +rhythm (R2) | **0.564** (.338) | **0.274** (.407) | **0.626** (.600) | **0.750** (.725) |
+| +GRL (R3) | 🔄 | 🔄 | 🔄 | 🔄 |
+
+Official DS1/DS2 baseline for reference: F1-F ~0.24, F1-S ~0.40 (best seed).
+So on the sentinel best-epoch model, +V1+rhythm already takes **213-F from 0.24
+→ 0.56** and **232-S from ~0.03 → 0.27**. SWA (now 0.8E window) diverges from
+best-epoch — full 5-fold 2-seed on flat + final stack will settle which to report.
 
 **Immediate run queue** (one GPU job at a time, ~3.3 h/sentinel-fold):
 1. ✅ sentinel `flat`
@@ -184,7 +191,8 @@ Status: ✅ kept / ❌ rejected / 🔄 running / ⏸ built-not-run
 | 08-30 | **LOPO sentinel `flat` baseline** (SWA) | plain RLSTMClassifier, sentinel fold, 25 ep, {S,V,F} selection, train-N cap 35k, 208+INCART-F in train | **all**: F .477 S .507 N .927 V .954 · **mitbih (213-F/232-S)**: F **.411** S **.163** · **incart**: F .622 S .939 | ✅ **reference set.** {SWA + {S,V,F}-selection + INCART-F in train + N-cap} ≈ **doubled F1-213-F vs DS1/DS2 (.24→.41)**. Residual hard problem = MIT-BIH 232-S (.16, INCART S .94 doesn't transfer) and pushing 213-F further. **[BENCHMARK] 197 min/fold → full 5-fold ~16.5 h/seed.** |
 | 08-30 | **MultiPath rung 1 sentinel** (`--v1`, *replace* wiring) | F-specialist head **replaces** shared F logit | SWA mitbih F **.312** (flat .411), all F .367 (flat .477); S also down | ❌ **Rejected.** Narrow F-only path `[e_morph+e_v1]→1` underfits vs the shared head co-trained on abundant N/V gradient. `sentinel_vce_replaceWiring_REJECTED.json`. |
 | 08-31 | **MultiPath rung 1b sentinel** (`--v1`, *residual*) | `z_F = shared_F + f_corr` (zero-init) | **best-ep**: mitbih F **.461** (flat .443) S **.178** (.032) macro .563 (.503); all F .502 (.474) macro .721 (.694). **SWA**: mitbih F .440 (.411), but all F −.009 / incart F −.081 | ✅ **PASSES sentinel** (best-ep improves 213-F + 232-S, N/V not down). V1-residual kept. SWA mixed — full 5-fold will decide. |
-| 08-31 | **MultiPath rung 2 sentinel** (`--v1 --rhythm`) | + rhythm MLP → S-specialist (residual on z_S) — targets 232-S | — | 🔄 **RUNNING** (PID 797) |
+| 08-31 | **MultiPath rung 2 sentinel** (`--v1 --rhythm`) | + rhythm MLP → S-specialist (residual on z_S) | **best-ep**: mitbih F **.564** (flat .443, R1b .461) · S **.274** (.032) · macro **.626** (.503) ; all macro **.750** (.694). **SWA**: S huge (mitbih .16→.41) but F tanked (.44→.34) | ✅ **PASSES sentinel (best-epoch)** — big clean win on 213-F + 232-S. Rhythm S-specialist KEPT. SWA window was too wide (0.6E) → narrowed to 0.8E for rung 3+. |
+| 08-31 | **MultiPath rung 3 sentinel** (`--v1 --rhythm --grl`) | + conditional GRL record adversary on e_morph, λ 0→0.2 | — | 🔄 **RUNNING** (PID 198) |
 | 08-29 | **LOPO harness + sentinel fold** | `preprocess_lopo.py` + `train_lopo_cv.py` (`--mode kfold|sentinel`, per-fold norm, inner-val selection on {S,V,F}, SWA, by-DB). Protocol locked in `docs/LOPO_PROTOCOL.md`. | — | ✅ **built** (helper tests pass); needs 1-fold GPU smoke + wall-time benchmark |
 | — | HMR-MultiPath rung 0 (`flat` sentinel + LOPO) | plain trunk, reference distribution | — | ⏸ next after hier_ba |
 | — | HMR-MultiPath rung 1 (V1 + F-specialist) | attacks B4/B3 | — | ⏸ not built |

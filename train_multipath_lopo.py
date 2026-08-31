@@ -133,7 +133,10 @@ def train_fold(fold, idx, data, device, args, ckpt_dir):
                                   torch.from_numpy(rec_tr_c)),
                     batch_size=CONFIG["batch_size"], shuffle=True)
 
-    swa_start = int(args.epochs * 0.6)
+    # last ~20% of epochs. 0.6 was too wide — the rhythm S-specialist keeps
+    # shifting the S/F boundary late, so a wide SWA window over-favoured S and
+    # tanked F (rung 2: SWA mitbih F .34 vs best-epoch .56).
+    swa_start = int(args.epochs * 0.8)
     swa_sum, swa_n = None, 0
     tag = f"{'v' if args.v1 else ''}{'r' if args.rhythm else ''}{'g' if args.grl else ''}{args.loss}"
     state_path = ckpt_dir / f"mp_{tag}_fold{fold}_state.pt"
