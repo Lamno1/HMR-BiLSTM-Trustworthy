@@ -32,44 +32,48 @@ Last updated: **2026-08-29** (HD ladder step 2b `hier_ba` running; `hier` and `h
 
 ---
 
-## 1. CURRENT STEP
+## 1. CURRENT STEP  (session handoff 2026-08-31 ~15:00)
 
-**LOPO sentinel `flat` baseline — RUNNING** (`results/logs/lopo_sentinel_flat.log`,
-PID 1123, ~8 min/epoch, done ~08:45 2026-08-30).
-- `train_lopo_cv.py --mode sentinel --arch flat --epochs 25`
-- Establishes the reference F1-F/F1-S on the sentinel fold (test = 213-F, 232-S,
-  INCART I18/I74/I33/I62; 208 in train) + one-fold wall-time benchmark.
+**Two sentinel jobs running in PARALLEL** (AMP on, RAM ok, ~3.5 h):
+- PID 198 — `train_multipath_lopo.py --mode sentinel --v1 --rhythm --grl --epochs 25`
+  → `results/mp_lopo/sentinel_vrgce.json`, log `results/logs/mp_sentinel_v1rg.log`
+- PID 270 — `train_multipath_lopo.py --mode sentinel --v1 --rhythm --loss balanced --epochs 25`
+  → `results/mp_lopo/sentinel_vrbalanced.json`, log `results/logs/mp_sentinel_v1r_bal.log`
+Both are "rung 2 + one more module" — compare each to rung 2 (`sentinel_vrce.json`),
+then STACK whichever module(s) help. **User is closing this session; a new session
+picks up here.**
 
-**Everything for the MultiPath rungs is BUILT (2026-08-30, committed 2075adf):**
-- `hmr_multipath.py` — `HMRMultiPath` (flags: use_v1 / use_rhythm / use_grl;
-  all-off == plain 5-way head, 505k params) + `MultiPathLoss` (ce/balanced +
-  adversary CE + smoothness). Self-test passes rungs 0-3.
-- `train_multipath_lopo.py` — `--mode sentinel|kfold`, rung flags
-  `--v1 --rhythm --grl --loss balanced`. Shares fold/norm/sentinel/score with
-  `train_lopo_cv.py`. GRL λ ramp 0→0.2/10ep, FGSM on primary lead only, manual
-  SWA. Smoke-tested end-to-end on GPU.
-- `data/processed/lopo/pool.npz` **v2** — now carries `X2` (2nd lead: MIT-BIH
-  precordial (V1 ×38/44), INCART V1; both high-passed; 0% zero-filled).
+**When the two jobs finish** — read `results/mp_lopo/sentinel_{vrgce,vrbalanced}.json`
+(best_epoch_model + swa_model, blocks all / mitbih / incart). Compare to the table
+below. Promotion rule (`docs/LOPO_PROTOCOL.md`): a rung stacks only if its target
+class ↑ on the sentinel *best-epoch* model without F1-N/F1-V dropping.
 
-**Sentinel progression (best-epoch model — the primary read; SWA in parens):**
+**Sentinel progression so far (best-epoch model; SWA in parens):**
 
-| rung | mitbih F (213) | mitbih S (232) | mitbih macro | all macro |
-|---|---|---|---|---|
-| flat | 0.443 (.411) | 0.032 (.163) | 0.503 (.559) | 0.694 (.717) |
-| +V1 (R1b) | 0.461 (.440) | 0.178 (.169) | 0.563 (.566) | 0.721 (.714) |
-| +rhythm (R2) | **0.564** (.338) | **0.274** (.407) | **0.626** (.600) | **0.750** (.725) |
-| +GRL (R3) | 🔄 | 🔄 | 🔄 | 🔄 |
+| rung | mitbih F (213) | mitbih S (232) | mitbih macro | all macro | verdict |
+|---|---|---|---|---|---|
+| flat | 0.443 (.411) | 0.032 (.163) | 0.503 (.559) | 0.694 (.717) | reference (`results/lopo_cv/sentinel_flat.json`) |
+| +V1 replace | .335 (.312) | — | — | — | ❌ rejected (wiring) |
+| +V1 residual (R1b) | 0.461 (.440) | 0.178 (.169) | 0.563 (.566) | 0.721 (.714) | ✅ kept (`sentinel_vce.json`) |
+| +rhythm (R2) | **0.564** (.338) | **0.274** (.407) | **0.626** (.600) | **0.750** (.725) | ✅ kept (`sentinel_vrce.json`) |
+| R2 +GRL | 🔄 PID 198 | 🔄 | 🔄 | 🔄 | pending |
+| R2 +balanced | 🔄 PID 270 | 🔄 | 🔄 | 🔄 | pending |
 
-Official DS1/DS2 baseline for reference: F1-F ~0.24, F1-S ~0.40 (best seed).
-So on the sentinel best-epoch model, +V1+rhythm already takes **213-F from 0.24
-→ 0.56** and **232-S from ~0.03 → 0.27**. SWA (now 0.8E window) diverges from
-best-epoch — full 5-fold 2-seed on flat + final stack will settle which to report.
+Official DS1/DS2 baseline: F1-F ~0.24, F1-S ~0.40 (best seed). On the sentinel
+best-epoch model, **+V1+rhythm already takes 213-F 0.24→0.56 and 232-S ~0.03→0.27.**
 
-**Immediate run queue** (one GPU job at a time, ~3.3 h/sentinel-fold):
-1. ✅ sentinel `flat`
-2. 🔄 `--mode sentinel --v1` (rung 1) — does the V1 F-specialist lift F1-213-F?
-3. rung passes sentinel (its class ↑, others not down) → full 5-fold LOPO 2-seed;
-   then sentinel next rung. Rungs: `--v1` → `--v1 --rhythm` → `+--grl` → `+--loss balanced`.
+**NEXT (after the 2 jobs, for the new session):**
+1. Decide which of GRL / balanced to keep (sentinel best-epoch, don't drop N/V).
+2. Final stack (`--v1 --rhythm [+ winners]`) → **full 5-fold LOPO 2-seed**:
+   `train_multipath_lopo.py --mode kfold <flags> --k 5 --seeds 42 123`
+   (~16.5 h/seed; split folds across 2 parallel procs with `--folds 0 1 2` /
+   `--folds 3 4`). Also run the **flat** baseline full 5-fold for the comparison.
+3. Then DS1/DS2 3-seed of the final model (needs a small MLII+V1 adapter — see §6).
+4. Ablation table + paper write-up (§ E of the plan).
+
+**Everything BUILT & committed** (`git log`): `hmr_multipath.py`, `train_multipath_lopo.py`,
+`train_lopo_cv.py` (+AMP), `validation/preprocess_lopo.py` v2 (2-lead pool),
+`docs/LOPO_PROTOCOL.md`. Pool: `data/processed/lopo/pool.npz` (X, X2, y, rr, record, source).
 
 ### Hierarchical head: CLOSED (2026-08-30)
 All three calibration variants failed on DS2 (vs official F .255 / S .397):
