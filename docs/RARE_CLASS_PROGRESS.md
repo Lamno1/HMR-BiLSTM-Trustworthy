@@ -97,6 +97,41 @@ Notes:
 - balanced-softmax: if the paper's framing later shifts to "maximize S, defer F",
   R3b is on record (232-S 0.56) — but not the default.
 
+### P1 IN PROGRESS (started 2026-08-31 23:47 UTC via `run_plan.py`)
+
+R2 partial (9/10 runs, best-epoch, mitbih block): F1-F 0.07 +- 0.09
+(folds 2/3/4 ~= 0), F1-S 0.36 +- 0.13 (fold-heterogeneous 0.14-0.53),
+N 0.94, V 0.71, macro 0.52 +- 0.03. Flat baseline not started.
+
+**Confidence discipline (do not overclaim in the paper):**
+- F1-F is low on held-out MIT-BIH patients -> the DS1/DS2 0.24 does NOT
+  represent patient generalization. This is NOT "Bayes-error ceiling" - that
+  needs independent data/labels. Say "not recovered by architecture on this
+  data" / "patient-generalization gap".
+- S: in the 4 seed-paired folds the seed spread is 0.006-0.038 while the
+  fold spread is large. Correct phrasing: "observed variance is currently
+  fold-dominated, not seed-dominated." NOT "seed-lottery solved" - needs the
+  full 5 folds x 2 seeds.
+- Macro stability != F/S stability (N,V inflate macro). Paper leads with
+  F1-F, F1-S and per-fold numbers, macro second.
+- Never pool the 10 runs as i.i.d. samples.
+
+**P1 primary analysis (after flat completes):**
+1. average the two seeds within each fold; report the 5 fold-level values.
+2. paired R2 - flat delta per (fold, seed) AND per fold-mean.
+3. per fold: F/S support, TP/FP/FN (fold-0 F=0.262 may be a handful of
+   correct calls on patient 213, not a durable capability).
+
+**P1 gate (corrected):**
+- R2 "wins S" only if mean delta F1-S > 0 AND most folds not down AND R2
+  seed spread not worse than flat.
+- F: no full-coverage improvement claim unless the paired delta vs flat is
+  clearly positive; otherwise F goes entirely to referral/frontier.
+- P2 reports realized coverage / risk / set-size / spread per fold; S
+  conformal is not called a "guarantee" under patient shift.
+- D2 (+V1-only, 33 GPU-h) is NOT auto-run (removed from run_plan.py): only
+  if R2 beats flat on S and V1-vs-rhythm attribution is still open.
+
 **Two-layer / four-block plan (locked):**
 
 | Phase | Deliverable | Gate |

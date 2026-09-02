@@ -38,11 +38,11 @@ STAGES = [
      [PY, "-u", "-m", "selective.run_p2"], None, "selective/run_p2.py"),
     ("d1_ds12_r2",
      [PY, "-u", "-m", "validation.run_d1"], None, "validation/run_d1.py"),
-    ("d2_v1_ablation",
-     [PY, "-u", "train_multipath_lopo.py", "--mode", "kfold", "--v1",
-      "--k", "5", "--epochs", "25", "--seeds", "42", "123", "--out-dir", "results/mp_lopo"],
-     [PY, "-m", "validation.check_lopo_health", "results/mp_lopo", "vce", "5", "2"],
-     None),
+    # d2_v1_ablation is NOT auto-run: +V1-only LOPO is 33 GPU-h, worth it only
+    # if the P1 gate shows R2 beats flat on S but V1-vs-rhythm attribution is
+    # still open. Launch manually if so:
+    #   python -u train_multipath_lopo.py --mode kfold --v1 --k 5 --epochs 25 \
+    #     --seeds 42 123 --out-dir results/mp_lopo
 ]
 
 
