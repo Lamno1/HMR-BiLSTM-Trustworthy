@@ -34,10 +34,10 @@ STAGES = [
       "--seeds", "42", "123", "--out-dir", "results/lopo_cv"],
      [PY, "-m", "validation.check_lopo_health", "results/lopo_cv", "flat", "5", "2"],
      None),
-    ("p2_selective",
-     [PY, "-u", "-m", "selective.run_p2"], None, "selective/run_p2.py"),
     ("p1_gate",
      [PY, "-u", "-m", "validation.analyze_p1_gate"], None, "validation/analyze_p1_gate.py"),
+    ("p2_selective",
+     [PY, "-u", "-m", "selective.run_p2"], None, "selective/run_p2.py"),
     ("d1_ds12_r2",
      [PY, "-u", "-m", "validation.run_d1"], None, "validation/run_d1.py"),
     # d2_v1_ablation is NOT auto-run: +V1-only LOPO is 33 GPU-h, worth it only
