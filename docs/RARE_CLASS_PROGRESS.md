@@ -132,6 +132,46 @@ N 0.94, V 0.71, macro 0.52 +- 0.03. Flat baseline not started.
 - D2 (+V1-only, 33 GPU-h) is NOT auto-run (removed from run_plan.py): only
   if R2 beats flat on S and V1-vs-rhythm attribution is still open.
 
+### THESIS PIVOT (2026-09-03, from R2 partial results)
+
+F1-F ~0.07 on held-out MIT-BIH patients is NOT a classification result. It
+cannot support a Q1 claim of "effective F classification" or clinical
+auto-decision for F.
+
+| Not defensible | Defensible if P1/P2 confirm |
+|---|---|
+| "HMR-MultiPath solves F beats" | "LOPO evaluation exposes an F failure-to-generalize that the standard split hides" |
+| "conformal guarantees patient safety" | "per-fold calibration shows realized coverage under patient shift, with stated limits" |
+| "high accuracy on ECG arrhythmia" | "selective referral identifies the S cases that can be automated and the F cases that must go to an expert" |
+
+- **F -> refer-only / failure analysis.** Report support, TP/FP/FN,
+  precision/recall, patient/fold-level spread - not F1 or pooled beats.
+- **S -> research signal, not yet trustworthy for auto-decision.** Must show:
+  risk-coverage curve, achieved coverage, selective risk, prediction-set
+  size, uncertainty/CI at patient/fold level (NOT beat-level i.i.d.), and a
+  concrete useful operating point (coverage where S auto-handling has
+  substantially lower error + how many cases referred).
+
+### STOP / GO after p1_gate + P2
+
+Continue to a Q1 write-up ONLY if ALL of:
+1. flat baseline complete AND paired R2 - flat shows R2 clearly wins S
+   (mean dF1-S > 0, >=3/5 folds not down, seed spread not worse).
+2. P2 selective system reaches a useful S operating point: coverage well
+   above ~0 with selective risk substantially below the full-coverage error.
+3. DS1/DS2 is supplementary only; not used to assert generalization if LOPO
+   says otherwise.
+
+If flat ~= R2 on S, OR selective utility coverage ~= 0 (risk reduced only by
+referring almost everything): STOP before writing. Redirect effort to
+data/label quality and F representation, not more ablations.
+
+**P2 evidence gaps to add before write-up** (current run_p2.py is a first
+cut): S risk-coverage *curve* (sweep, not 2 alpha points); prediction-set
+size distribution; fold-level bootstrap CI (over folds, not beats); the
+"useful operating point" readout. Do this in a fresh session when flat +
+p1_gate are done.
+
 **Two-layer / four-block plan (locked):**
 
 | Phase | Deliverable | Gate |
