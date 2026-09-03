@@ -155,22 +155,32 @@ auto-decision for F.
 ### STOP / GO after p1_gate + P2
 
 Continue to a Q1 write-up ONLY if ALL of:
-1. flat baseline complete AND paired R2 - flat shows R2 clearly wins S
-   (mean dF1-S > 0, >=3/5 folds not down, seed spread not worse).
-2. P2 selective system reaches a useful S operating point: coverage well
-   above ~0 with selective risk substantially below the full-coverage error.
-3. DS1/DS2 is supplementary only; not used to assert generalization if LOPO
-   says otherwise.
+1. flat complete AND R2 clearly wins S: report ALL 5 fold-mean deltas AND
+   ALL 10 paired seed deltas. "Wins" requires mean dF1-S >= 0.02, a real
+   gain (>0.01) on >=3 folds (NOT one-fold-dominated, NOT merely 'not
+   down'), and R2 seed spread not worse than flat. A few-per-mille gain or a
+   single-fold gain is NOT a win.
+2. Useful S operating point, PRE-REGISTERED before seeing full P2:
+   non-trivial coverage, selective risk clearly below full-coverage error,
+   and the effect present on more than one fold. With no known clinical
+   utility threshold, label it exploratory - not a deployment claim.
+3. DS1/DS2 is supplementary literature-table only. It may NOT reverse or
+   soften the LOPO conclusion. The Q1 decision rests entirely on p1_gate + P2.
 
-If flat ~= R2 on S, OR selective utility coverage ~= 0 (risk reduced only by
-referring almost everything): STOP before writing. Redirect effort to
+If flat ~= R2 on S, OR the selective system reduces risk only by referring
+almost everything (useful coverage ~= 0): STOP before writing. Redirect to
 data/label quality and F representation, not more ablations.
 
-**P2 evidence gaps to add before write-up** (current run_p2.py is a first
-cut): S risk-coverage *curve* (sweep, not 2 alpha points); prediction-set
-size distribution; fold-level bootstrap CI (over folds, not beats); the
-"useful operating point" readout. Do this in a fresh session when flat +
-p1_gate are done.
+**P2 evidence set - MANDATORY before the Q1 decision** (current run_p2.py is
+a first cut; extend it in a fresh session once flat + p1_gate are done):
+- S risk-coverage CURVE (continuous sweep, not 2 alpha points)
+- prediction-set size distribution + singleton / ambiguous-set rate
+- per-fold values with uncertainty at fold/patient level (NO independent-beat
+  bootstrap)
+- fixed operating-points table: coverage, selective risk, abstention rate,
+  full-coverage baseline
+- F: frontier / referral diagnostics ONLY. Never select an "optimal F
+  threshold" to make a claim.
 
 **Two-layer / four-block plan (locked):**
 

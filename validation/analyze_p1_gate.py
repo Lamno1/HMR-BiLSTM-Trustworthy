@@ -103,9 +103,13 @@ def main() -> int:
 
     if dS:
         r2sp, flatsp = sp(r2), sp(flat)
-        wins_s = bool(np.mean(dS) > 0 and sum(x >= -1e-9 for x in dS) >= 3
+        # necessary AND sufficient: mean gain not trivial, gain shows on >=3
+        # folds (not one-fold-dominated, not merely 'not down'), and seed
+        # spread not worse than flat.
+        wins_s = bool(np.mean(dS) >= 0.02 and sum(x > 0.01 for x in dS) >= 3
+                      and sum(x >= -1e-9 for x in dS) >= 4
                       and (r2sp is None or flatsp is None or r2sp <= flatsp + 1e-9))
-        f_claim = bool(dF and np.mean(dF) > 0.03 and sum(x > 0 for x in dF) >= 3)
+        f_claim = bool(dF and np.mean(dF) > 0.03 and sum(x > 0.01 for x in dF) >= 3)
         rep["gate"] = {
             "n_flat_folds": len({f for f, _ in flat}), "n_folds": len(folds),
             "dS_fold_mean": round(float(np.mean(dS)), 4),
