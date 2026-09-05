@@ -1,0 +1,794 @@
+{
+  "folds": [
+    0,
+    1,
+    2,
+    3,
+    4
+  ],
+  "seeds": [
+    42,
+    123
+  ],
+  "per_fold": [
+    {
+      "fold": 0,
+      "confusion": {
+        "r2_seed42": {
+          "F": {
+            "support": 399,
+            "tp": 30,
+            "fp": 466,
+            "fn": 369
+          },
+          "S": {
+            "support": 388,
+            "tp": 93,
+            "fp": 711,
+            "fn": 295
+          }
+        },
+        "r2_seed123": {
+          "F": {
+            "support": 399,
+            "tp": 192,
+            "fp": 1229,
+            "fn": 207
+          },
+          "S": {
+            "support": 388,
+            "tp": 81,
+            "fp": 463,
+            "fn": 307
+          }
+        },
+        "flat_seed42": {
+          "F": {
+            "support": 399,
+            "tp": 182,
+            "fp": 830,
+            "fn": 217
+          },
+          "S": {
+            "support": 388,
+            "tp": 50,
+            "fp": 634,
+            "fn": 338
+          }
+        },
+        "flat_seed123": {
+          "F": {
+            "support": 399,
+            "tp": 58,
+            "fp": 753,
+            "fn": 341
+          },
+          "S": {
+            "support": 388,
+            "tp": 59,
+            "fp": 746,
+            "fn": 329
+          }
+        }
+      },
+      "r2": {
+        "mit": {
+          "F": {
+            "per_seed": [
+              0.0652,
+              0.2624
+            ],
+            "mean": 0.1638,
+            "seed_spread": 0.1971
+          },
+          "S": {
+            "per_seed": [
+              0.135,
+              0.1534
+            ],
+            "mean": 0.1442,
+            "seed_spread": 0.0184
+          }
+        },
+        "all": {
+          "F": {
+            "per_seed": [
+              0.067,
+              0.211
+            ],
+            "mean": 0.139,
+            "seed_spread": 0.1439
+          },
+          "S": {
+            "per_seed": [
+              0.156,
+              0.1738
+            ],
+            "mean": 0.1649,
+            "seed_spread": 0.0178
+          }
+        }
+      },
+      "flat": {
+        "mit": {
+          "F": {
+            "per_seed": [
+              0.2875,
+              0.0947
+            ],
+            "mean": 0.1911,
+            "seed_spread": 0.1929
+          },
+          "S": {
+            "per_seed": [
+              0.1129,
+              0.1099
+            ],
+            "mean": 0.1114,
+            "seed_spread": 0.003
+          }
+        },
+        "all": {
+          "F": {
+            "per_seed": [
+              0.258,
+              0.0959
+            ],
+            "mean": 0.1769,
+            "seed_spread": 0.1621
+          },
+          "S": {
+            "per_seed": [
+              0.0933,
+              0.0989
+            ],
+            "mean": 0.0961,
+            "seed_spread": 0.0056
+          }
+        }
+      }
+    },
+    {
+      "fold": 1,
+      "confusion": {
+        "r2_seed42": {
+          "F": {
+            "support": 388,
+            "tp": 48,
+            "fp": 324,
+            "fn": 340
+          },
+          "S": {
+            "support": 391,
+            "tp": 348,
+            "fp": 897,
+            "fn": 43
+          }
+        },
+        "r2_seed123": {
+          "F": {
+            "support": 388,
+            "tp": 62,
+            "fp": 247,
+            "fn": 326
+          },
+          "S": {
+            "support": 391,
+            "tp": 310,
+            "fp": 756,
+            "fn": 81
+          }
+        },
+        "flat_seed42": {
+          "F": {
+            "support": 388,
+            "tp": 14,
+            "fp": 683,
+            "fn": 374
+          },
+          "S": {
+            "support": 391,
+            "tp": 235,
+            "fp": 705,
+            "fn": 156
+          }
+        },
+        "flat_seed123": {
+          "F": {
+            "support": 388,
+            "tp": 15,
+            "fp": 424,
+            "fn": 373
+          },
+          "S": {
+            "support": 391,
+            "tp": 205,
+            "fp": 394,
+            "fn": 186
+          }
+        }
+      },
+      "r2": {
+        "mit": {
+          "F": {
+            "per_seed": [
+              0.125,
+              0.184
+            ],
+            "mean": 0.1545,
+            "seed_spread": 0.059
+          },
+          "S": {
+            "per_seed": [
+              0.4876,
+              0.5253
+            ],
+            "mean": 0.5065,
+            "seed_spread": 0.0377
+          }
+        },
+        "all": {
+          "F": {
+            "per_seed": [
+              0.1263,
+              0.1779
+            ],
+            "mean": 0.1521,
+            "seed_spread": 0.0516
+          },
+          "S": {
+            "per_seed": [
+              0.4254,
+              0.4255
+            ],
+            "mean": 0.4255,
+            "seed_spread": 0.0001
+          }
+        }
+      },
+      "flat": {
+        "mit": {
+          "F": {
+            "per_seed": [
+              0.0257,
+              0.0317
+            ],
+            "mean": 0.0287,
+            "seed_spread": 0.006
+          },
+          "S": {
+            "per_seed": [
+              0.2529,
+              0.2849
+            ],
+            "mean": 0.2689,
+            "seed_spread": 0.032
+          }
+        },
+        "all": {
+          "F": {
+            "per_seed": [
+              0.0258,
+              0.0363
+            ],
+            "mean": 0.031,
+            "seed_spread": 0.0105
+          },
+          "S": {
+            "per_seed": [
+              0.3531,
+              0.4141
+            ],
+            "mean": 0.3836,
+            "seed_spread": 0.061
+          }
+        }
+      }
+    },
+    {
+      "fold": 2,
+      "confusion": {
+        "r2_seed42": {
+          "F": {
+            "support": 82,
+            "tp": 12,
+            "fp": 164,
+            "fn": 70
+          },
+          "S": {
+            "support": 576,
+            "tp": 203,
+            "fp": 179,
+            "fn": 373
+          }
+        },
+        "r2_seed123": {
+          "F": {
+            "support": 82,
+            "tp": 43,
+            "fp": 3148,
+            "fn": 39
+          },
+          "S": {
+            "support": 576,
+            "tp": 198,
+            "fp": 236,
+            "fn": 378
+          }
+        },
+        "flat_seed42": {
+          "F": {
+            "support": 82,
+            "tp": 54,
+            "fp": 1747,
+            "fn": 28
+          },
+          "S": {
+            "support": 576,
+            "tp": 236,
+            "fp": 288,
+            "fn": 340
+          }
+        },
+        "flat_seed123": {
+          "F": {
+            "support": 82,
+            "tp": 44,
+            "fp": 204,
+            "fn": 38
+          },
+          "S": {
+            "support": 576,
+            "tp": 207,
+            "fp": 437,
+            "fn": 369
+          }
+        }
+      },
+      "r2": {
+        "mit": {
+          "F": {
+            "per_seed": [
+              0.0,
+              0.0
+            ],
+            "mean": 0.0,
+            "seed_spread": 0.0
+          },
+          "S": {
+            "per_seed": [
+              0.4396,
+              0.4336
+            ],
+            "mean": 0.4366,
+            "seed_spread": 0.006
+          }
+        },
+        "all": {
+          "F": {
+            "per_seed": [
+              0.093,
+              0.0263
+            ],
+            "mean": 0.0596,
+            "seed_spread": 0.0667
+          },
+          "S": {
+            "per_seed": [
+              0.4238,
+              0.3921
+            ],
+            "mean": 0.4079,
+            "seed_spread": 0.0317
+          }
+        }
+      },
+      "flat": {
+        "mit": {
+          "F": {
+            "per_seed": [
+              0.0,
+              0.0
+            ],
+            "mean": 0.0,
+            "seed_spread": 0.0
+          },
+          "S": {
+            "per_seed": [
+              0.4799,
+              0.4059
+            ],
+            "mean": 0.4429,
+            "seed_spread": 0.074
+          }
+        },
+        "all": {
+          "F": {
+            "per_seed": [
+              0.0574,
+              0.2667
+            ],
+            "mean": 0.162,
+            "seed_spread": 0.2093
+          },
+          "S": {
+            "per_seed": [
+              0.4291,
+              0.3393
+            ],
+            "mean": 0.3842,
+            "seed_spread": 0.0897
+          }
+        }
+      }
+    },
+    {
+      "fold": 3,
+      "confusion": {
+        "r2_seed42": {
+          "F": {
+            "support": 72,
+            "tp": 17,
+            "fp": 1330,
+            "fn": 55
+          },
+          "S": {
+            "support": 860,
+            "tp": 756,
+            "fp": 737,
+            "fn": 104
+          }
+        },
+        "r2_seed123": {
+          "F": {
+            "support": 72,
+            "tp": 14,
+            "fp": 644,
+            "fn": 58
+          },
+          "S": {
+            "support": 860,
+            "tp": 777,
+            "fp": 770,
+            "fn": 83
+          }
+        },
+        "flat_seed42": {
+          "F": {
+            "support": 72,
+            "tp": 33,
+            "fp": 1035,
+            "fn": 39
+          },
+          "S": {
+            "support": 860,
+            "tp": 678,
+            "fp": 731,
+            "fn": 182
+          }
+        },
+        "flat_seed123": {
+          "F": {
+            "support": 72,
+            "tp": 28,
+            "fp": 602,
+            "fn": 44
+          },
+          "S": {
+            "support": 860,
+            "tp": 732,
+            "fp": 1085,
+            "fn": 128
+          }
+        }
+      },
+      "r2": {
+        "mit": {
+          "F": {
+            "per_seed": [
+              0.0204,
+              0.0
+            ],
+            "mean": 0.0102,
+            "seed_spread": 0.0204
+          },
+          "S": {
+            "per_seed": [
+              0.3089,
+              0.3344
+            ],
+            "mean": 0.3217,
+            "seed_spread": 0.0255
+          }
+        },
+        "all": {
+          "F": {
+            "per_seed": [
+              0.024,
+              0.0384
+            ],
+            "mean": 0.0312,
+            "seed_spread": 0.0144
+          },
+          "S": {
+            "per_seed": [
+              0.6426,
+              0.6456
+            ],
+            "mean": 0.6441,
+            "seed_spread": 0.003
+          }
+        }
+      },
+      "flat": {
+        "mit": {
+          "F": {
+            "per_seed": [
+              0.0308,
+              0.05
+            ],
+            "mean": 0.0404,
+            "seed_spread": 0.0192
+          },
+          "S": {
+            "per_seed": [
+              0.259,
+              0.3006
+            ],
+            "mean": 0.2798,
+            "seed_spread": 0.0416
+          }
+        },
+        "all": {
+          "F": {
+            "per_seed": [
+              0.0579,
+              0.0798
+            ],
+            "mean": 0.0688,
+            "seed_spread": 0.0219
+          },
+          "S": {
+            "per_seed": [
+              0.5976,
+              0.5469
+            ],
+            "mean": 0.5723,
+            "seed_spread": 0.0507
+          }
+        }
+      }
+    },
+    {
+      "fold": 4,
+      "confusion": {
+        "r2_seed42": {
+          "F": {
+            "support": 42,
+            "tp": 20,
+            "fp": 233,
+            "fn": 22
+          },
+          "S": {
+            "support": 2490,
+            "tp": 1395,
+            "fp": 439,
+            "fn": 1095
+          }
+        },
+        "r2_seed123": {
+          "F": {
+            "support": 42,
+            "tp": 19,
+            "fp": 260,
+            "fn": 23
+          },
+          "S": {
+            "support": 2490,
+            "tp": 1549,
+            "fp": 518,
+            "fn": 941
+          }
+        },
+        "flat_seed42": {
+          "F": {
+            "support": 42,
+            "tp": 16,
+            "fp": 340,
+            "fn": 26
+          },
+          "S": {
+            "support": 2490,
+            "tp": 983,
+            "fp": 1384,
+            "fn": 1507
+          }
+        },
+        "flat_seed123": {
+          "F": {
+            "support": 42,
+            "tp": 17,
+            "fp": 341,
+            "fn": 25
+          },
+          "S": {
+            "support": 2490,
+            "tp": 940,
+            "fp": 1333,
+            "fn": 1550
+          }
+        }
+      },
+      "r2": {
+        "mit": {
+          "F": {
+            "per_seed": [
+              0.0,
+              0.0449
+            ],
+            "mean": 0.0225,
+            "seed_spread": 0.0449
+          },
+          "S": {
+            "per_seed": [
+              0.4368,
+              0.5136
+            ],
+            "mean": 0.4752,
+            "seed_spread": 0.0767
+          }
+        },
+        "all": {
+          "F": {
+            "per_seed": [
+              0.1356,
+              0.1184
+            ],
+            "mean": 0.127,
+            "seed_spread": 0.0172
+          },
+          "S": {
+            "per_seed": [
+              0.6452,
+              0.6798
+            ],
+            "mean": 0.6625,
+            "seed_spread": 0.0346
+          }
+        }
+      },
+      "flat": {
+        "mit": {
+          "F": {
+            "per_seed": [
+              0.0,
+              0.0099
+            ],
+            "mean": 0.0049,
+            "seed_spread": 0.0099
+          },
+          "S": {
+            "per_seed": [
+              0.0728,
+              0.045
+            ],
+            "mean": 0.0589,
+            "seed_spread": 0.0278
+          }
+        },
+        "all": {
+          "F": {
+            "per_seed": [
+              0.0804,
+              0.085
+            ],
+            "mean": 0.0827,
+            "seed_spread": 0.0046
+          },
+          "S": {
+            "per_seed": [
+              0.4048,
+              0.3947
+            ],
+            "mean": 0.3997,
+            "seed_spread": 0.0101
+          }
+        }
+      }
+    }
+  ],
+  "paired_delta": [
+    {
+      "fold": 0,
+      "seed": 42,
+      "dF_mit": -0.2223,
+      "dS_mit": 0.0221,
+      "dF_all": -0.1909,
+      "dS_all": 0.0628
+    },
+    {
+      "fold": 0,
+      "seed": 123,
+      "dF_mit": 0.1677,
+      "dS_mit": 0.0435,
+      "dF_all": 0.1151,
+      "dS_all": 0.0749
+    },
+    {
+      "fold": 1,
+      "seed": 42,
+      "dF_mit": 0.0993,
+      "dS_mit": 0.2347,
+      "dF_all": 0.1005,
+      "dS_all": 0.0723
+    },
+    {
+      "fold": 1,
+      "seed": 123,
+      "dF_mit": 0.1523,
+      "dS_mit": 0.2404,
+      "dF_all": 0.1416,
+      "dS_all": 0.0114
+    },
+    {
+      "fold": 2,
+      "seed": 42,
+      "dF_mit": 0.0,
+      "dS_mit": -0.0403,
+      "dF_all": 0.0357,
+      "dS_all": -0.0053
+    },
+    {
+      "fold": 2,
+      "seed": 123,
+      "dF_mit": 0.0,
+      "dS_mit": 0.0276,
+      "dF_all": -0.2404,
+      "dS_all": 0.0527
+    },
+    {
+      "fold": 3,
+      "seed": 42,
+      "dF_mit": -0.0104,
+      "dS_mit": 0.05,
+      "dF_all": -0.0339,
+      "dS_all": 0.045
+    },
+    {
+      "fold": 3,
+      "seed": 123,
+      "dF_mit": -0.05,
+      "dS_mit": 0.0339,
+      "dF_all": -0.0414,
+      "dS_all": 0.0987
+    },
+    {
+      "fold": 4,
+      "seed": 42,
+      "dF_mit": 0.0,
+      "dS_mit": 0.364,
+      "dF_all": 0.0552,
+      "dS_all": 0.2405
+    },
+    {
+      "fold": 4,
+      "seed": 123,
+      "dF_mit": 0.0351,
+      "dS_mit": 0.4686,
+      "dF_all": 0.0334,
+      "dS_all": 0.2851
+    }
+  ],
+  "gate": {
+    "n_flat_folds": 5,
+    "n_folds": 5,
+    "dS_fold_mean": 0.1445,
+    "dS_folds_not_down": 4,
+    "dF_fold_mean": 0.0172,
+    "r2_S_seed_spread": 0.0329,
+    "flat_S_seed_spread": 0.0357,
+    "R2_wins_S": true,
+    "F_full_coverage_claim": false,
+    "verdict": "R2 wins S. F: referral/frontier only."
+  }
+}

@@ -1,0 +1,22 @@
+{
+  "status": "PASS",
+  "errors": [],
+  "n_curve_rows": 4000,
+  "files": {
+    "manifest.json": "92a121ae14c96a2f665ba99bd50f8eb7f9d7699d3d76f3496ceac3994bc5e940",
+    "continuous_s_risk_coverage.csv": "93b0c6aaad949ce224e75d49173cd584f1a572efdb91b258a1ab3528f953a8d1",
+    "continuous_s_risk_coverage.json": "7fa194a82e2db8a74a5b91b6fbdc2f1c4f72a277fdd5931b08fcae060daf58c5",
+    "fixed_operating_points.csv": "a1aab30442fcfa0a2d13904569632af1c60bf254beb874b10caec8d764b45568",
+    "prediction_set_sizes.csv": "2dbc1c4ac43d34b5a97bef44232b97b26da2eaddbfa4ba38d8910f534ced4803",
+    "patient_level_metrics.csv": "bbb632a13b413a44a415ec44eba14f5fdcb1fc80f2c2cad28767066386f479ff",
+    "fold_level_metrics.csv": "8df7e1e986a2c80cddfdf2276b0e50c4ff958da029e6f5a6479ecf664211ea7a",
+    "patient_cluster_uncertainty.json": "f721b0074dc42e5c1a38c7e5ff085c077fb906628ea2a0b01f98c5d337193083",
+    "f_referral_diagnostics.csv": "1b2b0861c9e27c16dd8bef5eba90fb42005ec972df158fe134185f403c500f4e",
+    "go_criterion.csv": "cc950685e7823246c0d4e0ca4bb1ccd018cde1a139e8be61cde0b9040828c85e",
+    "r2_vs_flat_summary.json": "9384dc728c7b3ac5bf854b783b30726426d2ed1304c8190e233cb2916c87dfa1",
+    "fixed_operating_points.json": "ed26dabbfe4a9ff93641c6fe4ab1de596d756cc658b4b7b14467af36224c2ca9",
+    "fold_level_metrics.json": "909d6fbb13f1e7a993331864225952c1e20a347047c238e347ee9d3867be1148",
+    "f_referral_diagnostics.json": "eb7e7b04706f88353c9c69d5e512e398db2e83dec3476eac60b180c7e365fdb1",
+    "P2_FINAL_REPORT.md": "dc80ae9ea80a59f47613c1338053b063e408b4741d4d6ef30993c180850b80bf"
+  }
+}
