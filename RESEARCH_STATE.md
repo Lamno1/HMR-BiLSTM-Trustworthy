@@ -3,7 +3,37 @@
 Canonical current research state. Updated after every experiment that changes a
 verdict. Source of raw numbers: `results/`, `docs/RARE_CLASS_PROGRESS.md`.
 
-Last updated: **2026-09-05** (post P1 LOPO + P2 first-cut; D1 stopped).
+Last updated: **2026-09-05** — **EXPERIMENTAL PHASE CLOSED.** E1/E2/E5/P2-final
+all done. Next and only step: write the paper (LOPO evaluation-methodology +
+honest negative result + F referral framing). No E3/E4/E6, no alternative
+accept rule, no D1 rerun, no training.
+
+## FINAL VERDICT (2026-09-05, after E1/E2/E5/P2-final)
+
+- **F auto-classification: not viable** on single-lead single-beat inter-patient
+  MIT-BIH. Errors low-rank (E1), calibration-irrecoverable (E1/P2-final),
+  governed by patient-relative N/V geometry with ~1/3 of F geometrically
+  N-coincident (E5-B). No numerical ceiling (E2). -> F is REFERRED, not
+  classified. Framed operationally, never via a ceiling number.
+- **S selective automation: NO-GO.** P2-final pre-registered criterion
+  (overall risk <= 0.02 AND auto-S coverage >= 0.15 AND auto-S precision >= 0.90)
+  met by 0/3 ranking-reliable folds (fold 2: precision 0.96 but coverage 0.026;
+  fold 3: coverage 0.38 but precision 0.30; fold 1: no safe-zone coverage).
+  Flat also 0/3. Per-class temperature calibration is NOT the lever (refuted).
+- **S ranking: R2 is a real but modest improvement over flat** — S-AUC up on all
+  5 folds, subtype-confirmed (MIT-A cross-fold spread halved 0.55 -> 0.31),
+  seed-consistent. Present as "rhythm branch recovers prematurity signal", NOT
+  "solved S".
+- **H-S3 (subtype) REJECTED** (E5-A: MIT-S is ~90%+ subtype A; A-AUC spread 0.31,
+  worse than aggregate). Fold-0/4 S failure is patient-level, not subtype.
+- **H-F4 mechanism supported, actionable clause rejected** (E5-B: geometry yes;
+  patient-isolation <-> performance null, sign-unstable). No basis for E6.
+- **Methodological headline:** standard DS1/DS2 overstates rare-class ECG
+  performance ~3x (F1-F 0.24 -> 0.07; the single F1-S number hides a per-patient
+  0.14-0.53 range). This is the paper's contribution.
+
+---
+(historical state below; superseded by the FINAL VERDICT above)
 
 ---
 

@@ -3,7 +3,22 @@
 What we are doing RIGHT NOW and why. One active plan at a time.
 See RESEARCH_STATE.md for context, EXPERIMENT_LOG.md for history.
 
-Last updated: **2026-09-05**.
+Last updated: **2026-09-05** — **SUPERSEDED. Experimental phase CLOSED.**
+
+E1, E2, E5-A, E5-B, and the P2-final expansion are all complete. Final verdict
+is in `RESEARCH_STATE.md` and `EXPERIMENT_LOG.md`. P2-final is NO-GO (0/3
+ranking-reliable folds meet the pre-registered S criterion; flat also 0/3).
+
+**The single active task is now: WRITE THE PAPER** — LOPO evaluation-methodology
++ honest negative result + F referral framing (see RESEARCH_STATE FINAL VERDICT).
+
+Do NOT run E3 / E4 / E6 / alternative accept rules / D1 rerun / any training.
+Optional supplementary only: instrumented D1 for a DS1/DS2 comparison table
+(needs per-epoch checkpoint + timing logs first), low priority.
+
+Everything below this line is the pre-closure plan, kept for provenance.
+
+---
 
 ---
 
