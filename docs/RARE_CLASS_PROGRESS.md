@@ -97,11 +97,46 @@ Notes:
 - balanced-softmax: if the paper's framing later shifts to "maximize S, defer F",
   R3b is on record (232-S 0.56) — but not the default.
 
-### P1 IN PROGRESS (started 2026-08-31 23:47 UTC via `run_plan.py`)
+### STATE 2026-09-05 (P1 + P2 first-cut done; D1 stopped; NO Q1 go)
 
-R2 partial (9/10 runs, best-epoch, mitbih block): F1-F 0.07 +- 0.09
-(folds 2/3/4 ~= 0), F1-S 0.36 +- 0.13 (fold-heterogeneous 0.14-0.53),
-N 0.94, V 0.71, macro 0.52 +- 0.03. Flat baseline not started.
+`run_plan.py` completed: p1a R2 LOPO (41.5h), p1b flat LOPO (38.2h, health
+pass), p1_gate, p2_selective. d1_ds12_r2 was **deliberately stopped** (choice
+B) at ~3.2 h/epoch; `run_d1.py` has NO per-epoch checkpoint so seed-42's 9
+epochs are lost, not resumable. Driver state: `d1_ds12_r2: failed`.
+
+**TWO DISTINCT VERDICTS - do not conflate:**
+
+1. **P1 classifier gate: R2 wins S** (`results/p1_gate/report.json`).
+   dS_fold_mean +0.1445, 4/5 folds not down, R2 S-seed-spread 0.033 <= flat
+   0.036. Consistent large S gain on folds 1 (+0.235/+0.240) and 4
+   (+0.364/+0.469) across BOTH seeds; folds 0,3 small consistent; fold 2 a
+   wash. F: dF_fold_mean +0.017, fold-0 flips sign by seed -> F stays
+   refer-only, no full-coverage claim.
+
+2. **Overall Q1 STOP/GO: NOT passed.** P2 (`results/p2/summary.json`):
+   useful S selective auto-decision exists ONLY on fold 4 (auto_cov_S
+   0.24-0.30, auto_prec_S 0.93-0.98). Every other fold/seed auto_cov_S ~= 0
+   (n_auto 0-2): the conformal set almost never becomes an S singleton
+   (realised S-coverage 0.99-1.0 there). STOP/GO condition "effect on more
+   than one fold" is FAILED with the current P2.
+
+**Diagnosis status:** isolated 20-batch profile of the D1 train step
+estimates ~8.1 min/epoch (FGSM 47% / fwd 20% / bwd 33% / data+opt ~0%) -
+i.e. no algorithmic bug or redundant loop. The 24x gap vs the observed
+3.2 h/epoch is UNPROVEN; "Windows/desktop contention" is a hypothesis, not
+demonstrated on the slow process itself.
+
+**Do NOT:** rerun flat/R2 LOPO; run D2; lower D1 --epochs (hides the issue,
+breaks recipe parity).
+
+**Before rerunning D1:** add per-epoch checkpoint/resume; separate timing
+logs (train / val / SWA); log batch count, batch size, GPU memory; monitor
+that process's own CPU/GPU utilisation across one real epoch; keep 45 epochs.
+
+**Before deciding paper direction:** expand P2 to the full mandatory
+evidence set (continuous S risk-coverage curve, set-size distribution +
+singleton/ambiguous rate, fold/patient-level uncertainty, fixed
+operating-points table; F = referral diagnostics only).
 
 **Confidence discipline (do not overclaim in the paper):**
 - F1-F is low on held-out MIT-BIH patients -> the DS1/DS2 0.24 does NOT
