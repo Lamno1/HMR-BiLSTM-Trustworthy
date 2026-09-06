@@ -176,11 +176,72 @@ evidence. Source-stratified MIT-BIH and INCART results remain separate throughou
 
 \section{Main Results}
 \subsection{Patient-composition sensitivity of rare-class estimates}
-% Phase 3: verified same-model-family cross-protocol result; no causal split claim.
+% Artifacts: results/logs/baseline_results.json; results/lopo_cv/summary_flat.json.
+For the same flat RLSTMClassifier model family, the conventional DS1/DS2
+reference run obtained F1-F $=0.241$, whereas its MIT-BIH best-epoch fold mean
+under record-grouped LOPO was $0.053$. We describe this as an observed
+cross-protocol gap, not as a controlled estimate of the causal effect of the
+split. The LOPO pipeline additionally introduced INCART records into the
+development pool, used a shorter training schedule, and capped the number of N
+training beats. These differences can also affect optimisation and learned
+representations. What the comparison establishes directly is that the
+conventional rare-class point estimate did not describe performance across the
+held-out patient groups encountered by the matched LOPO model family.
+
+The concentration documented in Section~3 explains why the discrepancy matters:
+although DS1 and DS2 are record-disjoint, their F test estimate is dominated by
+one patient. LOPO distributes the dominant rare-class records across outer folds
+and exposes the resulting variability rather than compressing it into one test
+number.
 \subsection{Per-fold rare-class performance}
-% Phase 3: Fig. 2 -- paired R2/flat points and fold means; no pooled bars.
+% Artifact: results/p1_gate/report.json.
+Figure~\ref{fig:lopo_pairs} shows every paired seed result and emphasises the
+mean within each outer fold. On MIT-BIH, R2 achieved a five-fold mean F1-F of
+$0.070$, with fold means ranging from $0.000$ to $0.164$. Its mean F1-S was
+$0.377$, with fold means ranging from $0.144$ to $0.507$. Thus neither class is
+well represented by a single aggregate value: F effectively disappears in
+three folds, while S performance changes substantially with the held-out record
+group.
+
+\begin{table}[htbp]
+\caption{MIT-BIH rare-class F1 by outer fold. Values are means over the two
+paired training seeds; individual seed points are retained in
+Fig.~\ref{fig:lopo_pairs}.}
+\label{tab:lopo-fold-f1}
+\centering
+\begin{tabular}{@{}ccccc@{}}
+\toprule
+Fold & Flat F & R2 F & Flat S & R2 S \\
+\midrule
+0 & 0.191 & 0.164 & 0.111 & 0.144 \\
+1 & 0.029 & 0.155 & 0.269 & 0.507 \\
+2 & 0.000 & 0.000 & 0.443 & 0.437 \\
+3 & 0.040 & 0.010 & 0.280 & 0.322 \\
+4 & 0.005 & 0.023 & 0.059 & 0.475 \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+\begin{figure}[htbp]
+\centering
+\includegraphics[width=\textwidth]{images/lopo_fold_pairs.png}
+\caption{Paired flat and R2 MIT-BIH F1 values for each training seed and outer
+fold. Open markers show the within-fold mean. Lines connect matched seeds; no
+beats or folds are pooled into a bar.}
+\label{fig:lopo_pairs}
+\end{figure}
 \subsection{Patient-level heterogeneity and uncertainty}
-% Phase 3: raw fold/patient values and record-cluster uncertainty.
+% Artifacts: results/p1_gate/report.json; results/p2_final/patient_level_metrics.csv;
+% results/p2_final/patient_cluster_uncertainty.json.
+The fold supports themselves are heterogeneous: MIT-BIH F support across the
+five outer folds is 399, 388, 82, 72, and 42 beats, while S support is 388, 391,
+576, 860, and 2,490. These counts are properties of held-out record groups, not
+sampling noise that should be erased through beat pooling. Accordingly, the
+primary tables retain all five folds and the two paired seeds. For the selective
+analysis, uncertainty intervals resample whole records after averaging the two
+model-seed measurements within each record. With only about nine MIT-BIH test
+records in a fold, these intervals are necessarily wide and are interpreted
+alongside, rather than instead of, the raw fold and patient values.
 
 \section{HMR-MultiPath R2 Configuration}
 \subsection{Flat recurrent baseline}
@@ -208,19 +269,87 @@ V1-plus-rhythm R2 configuration with flat; it does not contain a full V1-only
 ablation. Any observed S/PAC change is therefore attributed to the R2
 configuration as a whole, not specifically to its rhythm branch.
 \subsection{R2 versus flat under identical LOPO folds}
-% Phase 3: paired fold/seed evidence with modest-ranking framing.
+% Artifacts: results/p1_gate/report.json; results/forensic/E1_report.json.
+R2 increased MIT-BIH F1-S by $0.145$ on average over the five paired fold means.
+Four of five fold means did not decrease. Its average within-fold S seed spread
+was $0.033$, compared with $0.036$ for flat. The two largest gains were also
+directionally consistent across seeds: fold 1 improved by $0.235$ and $0.240$,
+and fold 4 by $0.364$ and $0.469$. Fold 2 was the exception, with one negative
+and one positive seed-level difference and a slightly negative fold-mean change.
+
+The ranking evidence is more uniform than the F1 evidence. R2 S-AUC exceeded
+flat S-AUC in every MIT-BIH fold: respectively $0.733$ versus $0.499$, $0.980$
+versus $0.873$, $0.951$ versus $0.795$, $0.950$ versus $0.823$, and $0.816$
+versus $0.485$. We therefore interpret R2 as a modest, real improvement in
+S/PAC ranking. This does not imply that S is solved: the fold variability remains
+large, and Section~7 tests whether the ranking gain supports an operationally
+useful selective decision.
 
 \section{Forensic Analysis of Fusion and Supraventricular Beats}
+\label{sec:forensic}
 \subsection{S/PAC ranking and subtype composition}
-% Phase 3: E1 ranking plus E5-A MIT/INCART subtype evidence.
+\label{sec:s-forensic}
+% Artifacts: results/forensic/E1_report.json; results/forensic/E5_subtype.json.
+Subtype composition does not explain the difficult S folds. The original MIT-BIH
+symbol A accounts for between 85\% and 99\% of S beats in every fold. Conditioning
+the ranking analysis on A therefore leaves all five folds eligible, yet R2's
+MIT-BIH A-only AUC still ranges from $0.664$ to $0.978$, a spread of $0.314$.
+This is wider, not narrower, than the aggregate S-AUC spread. In contrast,
+INCART A-only AUC ranges from $0.923$ to $0.993$, a spread of $0.070$. These
+results reject the registered hypothesis that changing proportions of AAMI-S
+subtypes drive the MIT-BIH fold variance. They instead locate the instability
+at the patient/domain level, while showing that PAC ranking can be strong in
+other held-out record groups.
 \subsection{Patient concentration in difficult S folds}
-% Phase 3: record composition and limits of beat-weighted summaries.
+% Artifacts: results/forensic/E1_report.json; results/forensic/E5_subtype.json.
+Fold 4 illustrates the danger of beat-weighted interpretation. Patient 232
+contributes 1,382 of the fold's 2,490 S beats, or 55.5\%. A strong beat-level
+score or selective operating point in this fold can consequently be driven by
+one presentation. We retain fold 4 in all reported results but excluded it from
+the pre-registered multi-fold GO count. Fold 0 is difficult for a different
+reason: its S support is not similarly concentrated in one record, yet its
+ranking AUC is only $0.733$. The two folds therefore should not be treated as
+instances of a single subtype-mixture failure.
 \subsection{Low-rank F errors}
-% Phase 3: probability-decile confusion; observation distinct from cause.
+% Artifact: results/forensic/E1_report.json.
+Among true-F beats that R2 classified as N, 48.7\% fall in the bottom three
+deciles of the model's F probability rank, whereas only 4.5\% fall in the top
+three deciles. The main failure is therefore not a population of strongly
+F-ranked examples narrowly losing the argmax. Moreover, ROC-AUC can look
+moderate while precision--recall utility collapses: on fold 2, F AUC is $0.785$
+but average precision is $0.001$ and F1-F is zero. This discrepancy reflects
+the small F prevalence and large false-positive burden and prevents AUC alone
+from being interpreted as usable F separability.
 \subsection{Patient-relative F geometry}
-% Phase 3: fixed-tertile result; do not turn tertile into natural prevalence.
+% Artifact: results/forensic/E5_fgeometry.json.
+Patient-relative geometry explains model behaviour more consistently than a
+global F cluster. For each record, N and V centroids were constructed without
+using F labels. Within the third of F samples nearest their patient's N centroid,
+94--99\% were classified N, depending on representation and distance. Conversely,
+F predictions became more frequent in the high-intermediacy tertile. The gradient
+replicated in logits and in the pre-head embedding, and with cosine and Euclidean
+distance, reducing the likelihood that it is solely an artefact of one geometry.
+
+This mechanism did not yield evidence for patient adaptation. Across record--seed
+pairs, the absolute Spearman correlations between patient isolation and F recall
+or precision were only $0.12$--$0.23$, were descriptively non-significant, and
+changed sign between logits and embeddings. We therefore retain the
+patient-relative geometry observation but reject the actionable claim that
+greater geometric isolation identifies patients for whom adaptation would
+recover F performance.
 \subsection{What the forensic evidence does not establish}
-% Phase 3: ambiguity versus context; no ceiling or patient-adaptive claim.
+% Artifacts: results/forensic/E2_ceiling.md; results/forensic/E2_rule_proxy.json;
+% results/forensic/E5_notes.md.
+The public MIT-BIH release contains adjudicated consensus annotations rather
+than the original independent label layers. Our literature review found no
+F-specific inter-annotator agreement statistic. A transparent rule proxy reached
+F1 $0.051$ and Cohen's $\kappa=0.022$, but this is a measurement of that rule
+against consensus labels, not a human-agreement or Bayes ceiling. Its failure
+could arise from crude measurements, missing leads or rhythm context, patient
+variation, or ambiguous labels. Taken together with the low-rank errors and
+geometry results, the evidence is consistent with label ambiguity or missing
+context on this data and in the tested single-beat pipelines; it does not prove
+that fusion beats are universally unclassifiable.
 
 \section{Selective Prediction and Referral}
 \subsection{Pre-registered decision policy and operating criterion}
@@ -245,15 +374,74 @@ $P(\mathrm{accept}\land\widehat{Y}=S\mid Y=S)$ is at least 0.15 and the auto-S
 precision $P(Y=S\mid\mathrm{accept}\land\widehat{Y}=S)$ is at least 0.90.
 The S selective contribution receives a GO verdict only if at least two folds
 from the pre-registered ranking-reliable set \{1,2,3\} meet all three conditions.
-Fold 0 is excluded because its S ranking AUC is 0.73, and fold 4 is excluded
+Fold 0 is excluded because its S ranking AUC is 0.73
+(Section~\ref{sec:s-forensic}), and fold 4 is excluded
 because 55\% of its S support comes from one patient. These exclusions affect
 the GO count but do not remove either fold from the reported results.
 \subsection{Continuous risk--coverage behaviour}
-% Phase 3: regenerate from P2-final; per-fold primary display.
+% Artifact: results/p2_final/continuous_s_risk_coverage.csv.
+Figure~\ref{fig:p2-risk-coverage} presents the continuous MIT-BIH curves for
+each fold, model, and seed. The panels are deliberately not pooled: folds that
+share a nominal conformal setting can occupy very different realised risk and
+coverage regions. The horizontal line marks the pre-registered overall-risk
+limit; it is an evaluation threshold, not a clinical guarantee.
+
+\begin{figure}[htbp]
+\centering
+\includegraphics[width=\textwidth]{images/p2_final_risk_coverage.png}
+\caption{Overall selective risk versus automatic-decision coverage on MIT-BIH,
+shown separately for each outer fold, model, and training seed. The dotted line
+is the pre-registered risk limit of 0.02.}
+\label{fig:p2-risk-coverage}
+\end{figure}
 \subsection{Per-fold GO/NO-GO assessment}
-% Phase 3: Fig. 7; folds 0/4 excluded by pre-registration.
+% Artifacts: results/p2_final/go_criterion.csv;
+% results/p2_final/r2_vs_flat_summary.json.
+No ranking-reliable fold met the complete useful-operating-point criterion
+(Table~\ref{tab:p2-go}). Fold 1 produced no accepted S decision in its safe
+region. Fold 2 retained high auto-S precision ($0.964$) but only $0.026$
+auto-S coverage, far below the required coverage. Fold 3 produced $0.379$
+coverage but only $0.299$ precision. Fold 4 had no point with overall selective
+risk at or below $0.02$; it would not have counted toward GO in any case. Thus
+R2 achieved 0/3 qualifying reliable folds, and flat also achieved 0/3.
+
+\begin{table}[htbp]
+\caption{Pre-registered P2-final assessment for R2 on MIT-BIH. For each fold,
+the displayed point maximises auto-S coverage among grid points satisfying the
+overall-risk limit. Folds 0 and 4 were excluded from the GO count before final
+assessment. A dash indicates that no grid point met the risk limit.}
+\label{tab:p2-go}
+\centering
+\begin{tabular}{@{}cccccc@{}}
+\toprule
+Fold & Risk & Auto-S coverage & Auto-S precision & Referral & GO status \\
+\midrule
+0 & 0.014 & 0.000 & 0.000 & 0.429 & Excluded \\
+1 & 0.018 & 0.000 & -- & 0.852 & Fail \\
+2 & 0.007 & 0.026 & 0.964 & 0.288 & Fail \\
+3 & 0.020 & 0.379 & 0.299 & 0.117 & Fail \\
+4 & -- & -- & -- & -- & Excluded \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+Temperature calibration is not the missing lever. R2's S classwise ECE improved
+on folds 1 and 3, yet neither produced a qualifying point; on fold 2 it changed
+slightly in the wrong direction. The flat model provides the stronger structural
+control: its fold-2 S-ECE decreased from $0.092$ to $0.036$ while producing no S
+singleton anywhere on the evaluated grid. Better average calibration therefore
+did not translate into useful selective S automation under the registered rule.
 \subsection{Referral framing for F}
-% Phase 3: scope to this dataset, setting, leads, and tested pipelines.
+% Artifacts: results/p2_final/f_referral_diagnostics.csv;
+% results/forensic/E1_report.json; results/forensic/E5_fgeometry.json.
+The selective layer receives a NO-GO verdict as an S automation contribution.
+For F, it was never evaluated as a threshold-optimisation mechanism: every
+singleton-F decision is referred by construction, and the reported F quantities
+describe referral workload and leakage only. Combined with the low-rank F errors
+and patient-relative geometry, this supports an operational recommendation to
+refer F-labelled candidates in this dataset, single-beat setting, available
+leads, and tested inter-patient pipelines. It is not a claim that all possible
+fusion-beat classifiers or decision policies must fail.
 
 \section{Limitations}
 % Phase 4: protocol confounds, seeds/folds, wide record CIs, consensus labels,
