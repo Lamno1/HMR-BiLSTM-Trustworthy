@@ -1,5 +1,9 @@
 # HMR-BiLSTM: A Robust and Interpretable Hybrid Memory Residual BiLSTM Framework for ECG Arrhythmia Classification
 
+> **Repository size note:** final rare-class predictions, models, and checkpoint
+> artifacts are committed for reproducibility. A future hosted remote may need
+> Git LFS; no history migration is currently applied.
+
 ## Overview
 
 HMR-BiLSTM is a deep learning framework for ECG arrhythmia classification on the MIT-BIH Arrhythmia Database, evaluated under the strict **inter-patient** protocol (de Chazal et al., DS1/DS2), where no patient's beats appear in both training and test. The architecture targets three failure modes of plain LSTM baselines on this task: weak modelling of cell/hidden-state interaction, poor minority-class recall under extreme class imbalance, and no built-in way for a clinician to see why a beat was flagged.

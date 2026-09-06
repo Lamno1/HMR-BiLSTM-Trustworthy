@@ -99,13 +99,80 @@ assuming that a beat-level nominal target transfers to unseen patients.
 
 \section{Record-Grouped Leave-Patients-Out Protocol}
 \subsection{Datasets and AAMI label mapping}
-% Phase 2: MIT-BIH primary data, INCART supporting data, preprocessing, leads, mapping.
+MIT-BIH Arrhythmia Database records form the primary evaluation source. Beats
+are centred on the annotated R peak and mapped to the five AAMI groups N, S, V,
+F, and Q. The principal morphology input is the MLII lead when it is available;
+the R2 configuration additionally uses the available V1-channel signal. INCART
+records provide supporting patient and morphology diversity, with lead II as
+the principal morphology channel and the available V1 lead for the auxiliary
+path. Because INCART and MIT-BIH differ in acquisition and population, all
+results are stratified by source. MIT-BIH alone determines the primary
+conclusions and the selective-prediction GO/NO-GO decision; INCART is supporting
+evidence only.
+
+Preprocessing preserves record identity through every stage. INCART signals
+undergo source-specific baseline filtering, R-peak recentering, polarity
+correction, and a morphology-quality filter before entering the combined pool.
+No globally normalised waveform is stored. Normalisation is fitted afresh
+inside each outer fold as described below, preventing information from an outer
+test record from entering its training transformation.
 \subsection{Conventional DS1/DS2 reference evaluation}
-% Phase 2: conventional reference protocol and patient composition.
+For literature continuity, we retain the patient-disjoint DS1/DS2 partition
+introduced by de Chazal et al.~\cite{RN21}. DS1 supplies model development data
+and DS2 is held out for evaluation. Although this protocol prevents the same
+record from appearing on both sides of the split, its rare-class test support is
+highly concentrated: 93\% of its F beats come from patient 213 and 75\% of its S
+beats come from patient 232. Consequently, its F and S scores are sensitive to
+the behaviour of those particular records. We use DS1/DS2 as a conventional
+reference rather than treating its single rare-class estimate as a patient
+distribution.
 \subsection{Outer folds, inner validation, and conformal calibration}
-% Phase 2: record folds, split isolation, normalisation, selection, calibration records.
+The primary protocol is five-fold grouped cross-validation with the ECG record
+as the statistical and splitting unit. No record contributes beats to more than
+one partition within a fold. Records are ordered by their F and S beat counts
+and assigned by a snake-draft procedure, first distributing F-bearing records,
+then S-only records, and finally the remaining records. This deliberately
+places the large rare-class record clusters in different outer folds rather
+than allowing one fold to absorb all of them. The resulting fold values are
+therefore reported individually as the empirical distribution over held-out
+patient groups.
+
+Each outer iteration contains three mutually record-disjoint development
+partitions. The \emph{model-train} records fit the network parameters. The
+\emph{inner-validation} records select the best epoch using macro-F1 over
+\{S,V,F\}; the same frozen inner-validation predictions subsequently serve as
+the tuning data for per-class temperature fitting. A separate
+\emph{conformal-calibration} partition is carved only from S-bearing, F-free
+records. This restriction protects the already small pool of F-bearing records
+from being removed from model training and makes explicit that the conformal
+procedure is evaluated for S, whereas F analysis is referral-diagnostic only.
+None of these partitions contains an outer-test record, and no threshold,
+temperature, epoch, or model parameter is fitted on the outer test fold.
+
+Waveform mean and standard deviation are estimated separately for each database
+source using model-train records only, then applied unchanged to model-train,
+inner-validation, conformal-calibration, and outer-test beats. Training follows
+the same recurrent recipe for the flat and R2 configurations. Best-epoch
+predictions selected by inner-validation \{S,V,F\} macro-F1 are the primary
+outputs. Tail-epoch stochastic weight averaging was also evaluated, with batch
+normalisation statistics recomputed on model-train data, but it did not improve
+R2 and is not used for the primary comparison.
+
+Before committing GPU resources to all outer folds, candidate configurations
+were screened on one fixed sentinel split containing difficult, high-support F
+and S records from both databases. A candidate advanced to full two-seed LOPO
+evaluation only if it improved a sentinel rare class without reducing N or V
+relative to the preceding retained configuration. The sentinel was a screening
+device only; all paper conclusions use the complete outer-fold evaluation.
 \subsection{Statistical units and reporting}
-% Phase 2: fold means, paired seeds, record uncertainty; beats/seeds are not iid.
+Outer-fold values, not pooled beats, are the primary generalisation summaries.
+The two training seeds for a given fold are paired repetitions on the same held-
+out records and are not treated as independent patients. We report both seed
+values, their within-fold mean and spread, and all five fold means. R2--flat
+comparisons are paired by fold and seed. Patient-level uncertainty uses the
+record as the resampling cluster, keeping all beats from a selected record
+together; an independent-beat bootstrap is not used as primary uncertainty
+evidence. Source-stratified MIT-BIH and INCART results remain separate throughout.
 
 \section{Main Results}
 \subsection{Patient-composition sensitivity of rare-class estimates}
@@ -117,9 +184,29 @@ assuming that a beat-level nominal target transfers to unseen patients.
 
 \section{HMR-MultiPath R2 Configuration}
 \subsection{Flat recurrent baseline}
-% Phase 2: concise shared architecture and training recipe.
+The flat comparator is the repository's RLSTMClassifier. A compact one-
+dimensional convolutional frontend extracts local morphology, followed by a
+two-layer bidirectional recurrent block built from Residual Memory Control
+(RMC) cells. Attention pooling converts the recurrent sequence to a beat-level
+embedding, and a shared fully connected head produces logits for the five AAMI
+classes. The flat model is deliberately retained as the strongest matched
+baseline: it uses the same outer folds, inner-validation rule, optimisation
+recipe, class handling, evaluation protocol, and metric definitions as R2.
 \subsection{R2 inputs and residual heads}
-% Phase 2: V1 and rhythm inputs; no unsupported component attribution.
+R2 preserves the entire flat morphology trunk and shared five-class head. It
+adds two lightweight residual specialists. A small convolutional encoder of the
+available V1-channel signal is concatenated with the shared beat embedding and
+produces an additive correction to the F logit. A rhythm multilayer perceptron
+encodes the stored beat-relative RR features and produces an additive correction
+to the S logit. The final layers of both residual heads are zero-initialised, so
+R2 begins with logits identical to the shared flat head and changes the F or S
+logit only when the auxiliary input supports such a correction.
+
+R2 is used here as a diagnostic configuration rather than presented as a new
+architectural contribution. The full LOPO comparison contrasts the joint
+V1-plus-rhythm R2 configuration with flat; it does not contain a full V1-only
+ablation. Any observed S/PAC change is therefore attributed to the R2
+configuration as a whole, not specifically to its rhythm branch.
 \subsection{R2 versus flat under identical LOPO folds}
 % Phase 3: paired fold/seed evidence with modest-ranking framing.
 
@@ -137,7 +224,30 @@ assuming that a beat-level nominal target transfers to unseen patients.
 
 \section{Selective Prediction and Referral}
 \subsection{Pre-registered decision policy and operating criterion}
-% Phase 2: temperature, Mondrian singleton, F referral, locked criterion.
+For each fold and seed, a vector of class-specific temperatures is fitted on
+inner-validation logits and then frozen. On the separate conformal-calibration
+records, the S nonconformity score is one minus the calibrated probability of S
+for true-S beats. Its split-conformal quantile defines an S-calibrated threshold
+at each pre-specified miscoverage level. Applying that threshold to all class
+probabilities produces a prediction set. A beat is automatically decided only
+when the set is a singleton and its singleton class is not F; singleton-F and
+all non-singleton or empty sets are referred. F-related quantities are therefore
+referral diagnostics, never the result of searching for an ``optimal F
+threshold.'' Realised S coverage on every outer fold is reported alongside its
+nominal target because patient shift weakens the exchangeability assumption.
+
+The useful-operating-point criterion was fixed before the final continuous
+risk--coverage curves were inspected. For a MIT-BIH fold, we consider the point
+at which the overall selective risk among all accepted automatic decisions is
+at most 0.02. The fold has a useful S operating point only if, at that point,
+the class-conditional auto-S coverage
+$P(\mathrm{accept}\land\widehat{Y}=S\mid Y=S)$ is at least 0.15 and the auto-S
+precision $P(Y=S\mid\mathrm{accept}\land\widehat{Y}=S)$ is at least 0.90.
+The S selective contribution receives a GO verdict only if at least two folds
+from the pre-registered ranking-reliable set \{1,2,3\} meet all three conditions.
+Fold 0 is excluded because its S ranking AUC is 0.73, and fold 4 is excluded
+because 55\% of its S support comes from one patient. These exclusions affect
+the GO count but do not remove either fold from the reported results.
 \subsection{Continuous risk--coverage behaviour}
 % Phase 3: regenerate from P2-final; per-fold primary display.
 \subsection{Per-fold GO/NO-GO assessment}
