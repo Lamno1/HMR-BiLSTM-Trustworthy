@@ -30,13 +30,14 @@ supraventricular beats that is hidden by a single conventional split. Forensic
 analyses separate ranking, calibration, subtype composition, patient-relative
 geometry, and decision-policy effects. The enhanced configuration improves
 supraventricular/PAC ranking, but a pre-registered risk-controlled selective
-policy does not achieve a useful operating point across reliable folds. Fusion
+policy yields a NO-GO result: it does not achieve a useful operating point
+across reliable folds. Fusion
 errors are consistent with label ambiguity or missing context in this dataset,
 single-beat setting, available leads, and tested pipelines; accordingly, fusion
 beats are framed as a referral class rather than a successfully automated class.
 The main contribution is therefore an evaluation methodology and an honest
-account of rare-class failure, not a claim that a new architecture solves the
-rare classes.
+account of rare-class failure, not a claim that a new architecture addresses the
+rare-class problem.
 }
 \keywords{ECG arrhythmia classification, rare classes, inter-patient evaluation,
 leave-patients-out validation, patient heterogeneity, selective prediction,
@@ -442,13 +443,118 @@ and patient-relative geometry, this supports an operational recommendation to
 refer F-labelled candidates in this dataset, single-beat setting, available
 leads, and tested inter-patient pipelines. It is not a claim that all possible
 fusion-beat classifiers or decision policies must fail.
+\section{Discussion}
+\subsection{What the evidence rules out within the tested pipelines}
+The negative findings narrow the explanation for rare-class failure. First,
+the extensive architecture search documented in the experiment record---more
+than 25 variants followed by the controlled LOPO comparison---did not turn F or
+S into a consistently reliable inter-patient class. This rules out another
+incremental architecture change as an evidence-based response to the observed
+gap; it does not rule out every architecture that could be developed. Second,
+per-class temperature scaling did not make S selective decisions useful under
+the registered policy, even when classwise calibration error improved. Third,
+the A-only analysis ruled out S subtype composition as the driver of the
+MIT-BIH fold variance. Fourth, the F probability-decile analysis ruled out the
+interpretation that most F errors were high-ranked argmax losses recoverable by
+a threshold adjustment. Finally, the weak and sign-unstable isolation
+correlations did not support patient-adaptive F classification as an actionable
+consequence of the observed geometry.
+
+These exclusions matter because each targets a different point in the pipeline:
+model configuration, calibration, label composition, decision threshold, and
+patient adaptation. Their convergence shifts the result away from a search for
+one more model-level correction and toward the limits exposed by record-grouped
+evaluation.
+
+\subsection{Explanations that remain compatible with the evidence}
+The present analyses cannot distinguish among F label ambiguity, missing rhythm
+or lead context, and insufficient diversity in the small set of F-bearing
+patients. Low-rank F errors are compatible with missing discriminative signal,
+but do not identify why that signal is absent. Patient-relative N/V geometry is
+compatible with an annotation boundary that depends on local rhythm context,
+but does not establish that interpretation. Likewise, the lack of independent
+annotator labels prevents separation of label disagreement from limitations of
+the recorded inputs or the tested models. These possibilities should therefore
+remain alternatives rather than being collapsed into a claim that F has an
+intrinsic performance ceiling.
+
+\subsection{Questions not tested here}
+We did not evaluate probability-threshold acceptance as an alternative to the
+conformal singleton rule, learned sequence or rhythm-context models, systematic
+scaling of the number of records, or the R2 configuration under the conventional
+DS1/DS2 protocol. The last comparison would require the deferred D1 experiment.
+These are genuine open questions, not explanations supported by the present
+results. In particular, the P2 NO-GO applies to the pre-registered policy on
+these data; it is not a proof that every selective policy must fail.
+
+\subsection{Ranking improvement versus useful automatic decisions}
+The practical result is the separation between ranking and decision utility.
+R2 improved S-AUC over flat in every MIT-BIH fold, including folds in which the
+flat model was near chance. Yet the same scores did not produce a useful
+risk-controlled operating point on any of the three pre-registered reliable
+folds. Better ranking is therefore insufficient evidence that a classifier can
+be trusted to make automatic decisions for unseen patients. Evaluation must
+carry the ranked scores through calibration, acceptance, patient-level
+heterogeneity, and the intended error constraint before an operational claim is
+made.
+
+For F, referral is consequently a design recommendation for this dataset,
+single-beat setting, available leads, and tested inter-patient pipelines. It
+has not been validated as a clinical policy. Its purpose is to avoid
+presenting unreliable automatic F decisions as successful automation
+while preserving a clear route to expert review.
 
 \section{Limitations}
-% Phase 4: protocol confounds, seeds/folds, wide record CIs, consensus labels,
-% untested accept rules/context, and INCART's supporting-only role.
+The flat-model comparison between F1-F $0.241$ under DS1/DS2 and $0.053$ under
+LOPO carries design differences beyond the patient partition. The LOPO run
+introduced INCART records into the development pool, used a shorter schedule,
+and capped N examples during training. It demonstrates sensitivity across the
+two evaluated protocols but does not decompose how much of the gap each change
+caused.
+
+The complete LOPO evaluation contains two training seeds and five outer folds,
+with only about nine MIT-BIH test records per fold. Seeds repeat optimisation on
+the same patients and are not independent statistical units. Record-cluster
+intervals are therefore wide by construction, and the five fold values and
+patient-level results remain essential to interpretation.
+
+MIT-BIH distributes consensus annotations rather than independent annotator
+labels. No F-specific inter-annotator agreement ceiling was available, so the
+study cannot quantify annotation ambiguity or use the rule proxy as such a
+ceiling. Alternative selective policies, including direct probability-threshold
+acceptance, and learned sequence-context models were not evaluated. The
+selective NO-GO is restricted to the pre-registered temperature-plus-Mondrian
+singleton policy on these data.
+
+INCART supplies supporting evidence about PAC rankability and patient diversity
+only; it did not enter the selective GO decision. Finally, conformal calibration
+relies on exchangeability that is stressed by evaluation on unseen patient
+groups and by the small calibration record count. We consequently report
+realised and nominal coverage separately and do not present the nominal target
+as a guarantee under patient shift.
 
 \section{Conclusion}
-% Phase 4: evaluation-methodology conclusion; preserve P2 NO-GO.
+Rare-class ECG performance is highly sensitive to which patients supply the
+test beats. In the same flat recurrent model family, a conventional DS1/DS2
+point estimate of F1-F $0.241$ became a five-fold mean of $0.053$ under the
+record-grouped LOPO pipeline, subject to the accompanying pool, schedule, and
+sampling confounds. Reporting all held-out folds showed both near-zero F
+performance in most patient groups and substantial S variability that a single
+test score concealed.
+
+R2 provided a modest, seed-consistent improvement in S/PAC ranking, but this did
+not translate into a useful selective classifier: neither R2 nor flat met the
+pre-registered S criterion on any of the three ranking-reliable folds. The
+selective contribution is therefore a NO-GO. For F, low-rank errors,
+patient-relative geometry, and the absence of a recoverable calibration effect
+support referral as a scoped design recommendation rather than successful
+automation.
+
+The main contribution is methodological. Record-level splitting, per-fold and
+patient-level reporting, paired controls, and pre-registered operational tests
+expose rare-class conclusions that remain hidden in a conventional aggregate
+score. On these data, honest evaluation changed the scientific conclusion more
+than another model iteration did.
 
 \section*{Acknowledgement}
 This research is funded by the University of Economics Ho Chi Minh City, Vietnam (UEH).
