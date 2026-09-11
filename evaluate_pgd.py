@@ -198,7 +198,7 @@ def compare_models_pgd(models_dict, epsilons, alpha, steps, device, test_loader)
             continue
         print(f"\n[PGD] Evaluating {model_name}")
         try:
-            if model_name == "HMR-BiLSTM":
+            if model_name == "ResMemECG":
                 model, _ = load_hmr_bilstm(ckpt, device)
             else:
                 model, _ = load_baseline_model(ckpt, device)
@@ -215,8 +215,8 @@ def compare_models_pgd(models_dict, epsilons, alpha, steps, device, test_loader)
 # Figures
 # ---------------------------------------------------------------------------
 
-COLORS  = {"LSTM": "#1f77b4", "BiLSTM": "#ff7f0e", "HMR-BiLSTM": "#2ca02c"}
-MARKERS = {"LSTM": "o",       "BiLSTM": "s",        "HMR-BiLSTM": "^"}
+COLORS  = {"LSTM": "#1f77b4", "BiLSTM": "#ff7f0e", "ResMemECG": "#2ca02c"}
+MARKERS = {"LSTM": "o",       "BiLSTM": "s",        "ResMemECG": "^"}
 
 
 def plot_pgd_f1_vs_epsilon(comparison, output_dir):
@@ -402,7 +402,7 @@ def main():
     models_dict = {
         "LSTM":       "results/checkpoints/best_lstm.pt",
         "BiLSTM":     "results/checkpoints/best_bilstm.pt",
-        "HMR-BiLSTM": "results/checkpoints/inter_best_rlstm.pt",
+        "ResMemECG": "results/checkpoints/inter_best_rlstm.pt",
     }
 
     comparison = compare_models_pgd(

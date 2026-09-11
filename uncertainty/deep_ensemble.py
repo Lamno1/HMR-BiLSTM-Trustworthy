@@ -2,7 +2,7 @@
 T5 — Deep Ensemble Uncertainty Estimation.
 
 Deep Ensembles (Lakshminarayanan et al., 2017) are the gold standard for
-predictive uncertainty. Each ensemble member is a full HMR-BiLSTM trained
+predictive uncertainty. Each ensemble member is a full ResMemECG trained
 from a different random seed.
 
 Strategy (given we have only one inter-patient checkpoint so far):

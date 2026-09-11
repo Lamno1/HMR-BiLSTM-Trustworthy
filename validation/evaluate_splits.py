@@ -48,7 +48,7 @@ def get_dataloader(npz_path, shuffle=False, subsample_size=None):
     return DataLoader(dataset, batch_size=BATCH_SIZE, shuffle=shuffle)
 
 def train_and_eval(split_name, train_path, val_path, test_path):
-    print(f"\n--- Training HMR-BiLSTM on {split_name} Split ---")
+    print(f"\n--- Training ResMemECG on {split_name} Split ---")
     
     # Loader configuration
     train_loader = get_dataloader(train_path, shuffle=True, subsample_size=TRAIN_SUB_SIZE)

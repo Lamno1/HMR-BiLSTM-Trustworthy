@@ -4,7 +4,7 @@
 """
 run_reproducible_pipeline.py
 ----------------------------
-Master orchestration script to execute the entire HMR-BiLSTM pipeline sequentially.
+Master orchestration script to execute the entire ResMemECG pipeline sequentially.
 Provides a --dry-run option for syntax validation and command inspection without execution.
 """
 
@@ -31,7 +31,7 @@ PIPELINE_STEPS = [
     },
     {
         "step": 3,
-        "name": "Train HMR-BiLSTM (Main Model — inter-patient)",
+        "name": "Train ResMemECG (Main Model — inter-patient)",
         "command": [sys.executable, "train_inter_patient.py"],
     },
     {
@@ -61,7 +61,7 @@ PIPELINE_STEPS = [
     },
     {
         "step": 9,
-        "name": "AutoAttack Robustness Comparison (LSTM/BiLSTM/HMR-BiLSTM)",
+        "name": "AutoAttack Robustness Comparison (LSTM/BiLSTM/ResMemECG)",
         "command": [sys.executable, "evaluate_autoattack_baselines.py"],
     },
     {
@@ -87,12 +87,12 @@ PIPELINE_STEPS = [
 ]
 
 def main():
-    parser = argparse.ArgumentParser(description="Execute HMR-BiLSTM complete reproducible pipeline.")
+    parser = argparse.ArgumentParser(description="Execute ResMemECG complete reproducible pipeline.")
     parser.add_argument("--dry-run", action="store_true", help="Print commands without executing them.")
     args = parser.parse_args()
 
     print("=" * 80)
-    print(" HMR-BiLSTM: COMPLETE PIPELINE EXECUTION MASTER SCRIPT")
+    print(" ResMemECG: COMPLETE PIPELINE EXECUTION MASTER SCRIPT")
     if args.dry_run:
         print(" [DRY-RUN MODE] Commands will be listed without execution.")
     print("=" * 80)

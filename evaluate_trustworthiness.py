@@ -305,8 +305,8 @@ def main():
 
     # Parse FGSM
     clean_fgsm_f1, fgsm_f1 = None, None
-    if fgsm_res_dict and "HMR-BiLSTM" in fgsm_res_dict:
-        for item in fgsm_res_dict["HMR-BiLSTM"]:
+    if fgsm_res_dict and "ResMemECG" in fgsm_res_dict:
+        for item in fgsm_res_dict["ResMemECG"]:
             if item.get("epsilon") == 0.0:
                 clean_fgsm_f1 = item.get("macro_f1")
             elif item.get("epsilon") == 0.02:
@@ -314,8 +314,8 @@ def main():
 
     # Parse PGD
     clean_pgd_f1, pgd_f1 = None, None
-    if pgd_res_dict and "HMR-BiLSTM" in pgd_res_dict:
-        for item in pgd_res_dict["HMR-BiLSTM"]:
+    if pgd_res_dict and "ResMemECG" in pgd_res_dict:
+        for item in pgd_res_dict["ResMemECG"]:
             if item.get("epsilon") == 0.0:
                 clean_pgd_f1 = item.get("macro_f1")
             elif item.get("epsilon") == 0.02:

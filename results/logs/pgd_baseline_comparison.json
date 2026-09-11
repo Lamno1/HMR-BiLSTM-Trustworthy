@@ -49,7 +49,7 @@
       "f1_adv_F": 0.03537504094333443
     }
   ],
-  "HMR-BiLSTM": [
+  "ResMemECG": [
     {
       "epsilon": 0.02,
       "alpha": 0.005,

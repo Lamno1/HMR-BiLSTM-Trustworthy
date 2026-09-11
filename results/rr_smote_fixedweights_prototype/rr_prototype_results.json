@@ -1,6 +1,6 @@
 {
   "variant": "hmr_bilstm_rr",
-  "label": "HMR-BiLSTM + RR-interval (prototype)",
+  "label": "ResMemECG + RR-interval (prototype)",
   "data_dir": "data/processed/splits_rr_smote",
   "class_weights_dir": "data/processed/splits_rr",
   "n_params": 505326,

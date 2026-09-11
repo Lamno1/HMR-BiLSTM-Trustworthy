@@ -32,7 +32,7 @@ CLASS_NAMES = ["N", "S", "V", "F", "Q"]
 NUM_CLASSES = 5
 
 
-# ─── Load mô hình HMR-BiLSTM đã train ────────────────────────
+# ─── Load mô hình ResMemECG đã train ────────────────────────
 def load_hmr_bilstm(checkpoint_path, device, input_size=1):
     ckpt = torch.load(checkpoint_path, map_location=device, weights_only=False)
     cfg = ckpt["config"]
@@ -114,7 +114,7 @@ def plot_confusion_matrix(y_true, y_pred, save_path):
     ax.set_ylabel("True Class", fontsize=11)
     ax.set_title("Confusion Matrix (normalized)", fontsize=12)
 
-    plt.suptitle("HMR-BiLSTM on MIT-BIH ECG Test Set", fontsize=13)
+    plt.suptitle("ResMemECG on MIT-BIH ECG Test Set", fontsize=13)
     plt.tight_layout()
     plt.savefig(save_path, dpi=400, bbox_inches="tight")
     plt.close()
@@ -137,7 +137,7 @@ def plot_roc_curve(y_true, y_prob, save_path):
     ax.plot([0, 1], [0, 1], "--", color="gray", linewidth=1)
     ax.set_xlabel("False Positive Rate", fontsize=12)
     ax.set_ylabel("True Positive Rate", fontsize=12)
-    ax.set_title("ROC Curves (One-vs-Rest) — HMR-BiLSTM on MIT-BIH ECG",
+    ax.set_title("ROC Curves (One-vs-Rest) — ResMemECG on MIT-BIH ECG",
                  fontsize=12)
     ax.legend(loc="lower right", fontsize=10)
     ax.grid(alpha=0.3)
@@ -187,7 +187,7 @@ def plot_gate_trajectories(r_all, y_all, save_path):
 def plot_comparison_bars(all_results, save_path):
     """Bar chart so sánh tất cả mô hình."""
     model_order = ["logistic_regression", "decision_tree", "lstm", "bilstm", "resnet1d", "hmr_bilstm"]
-    model_labels = ["LR", "DT", "LSTM", "BiLSTM", "ResNet1D", "HMR-BiLSTM"]
+    model_labels = ["LR", "DT", "LSTM", "BiLSTM", "ResNet1D", "ResMemECG"]
     metrics = ["accuracy", "precision_macro", "recall_macro", "f1_macro", "auc_ovr"]
     metric_labels = ["Accuracy", "Prec(macro)", "Rec(macro)", "F1(macro)", "AUC(OvR)"]
 
@@ -227,7 +227,7 @@ def plot_results_table(all_results, save_path):
         "lstm": "LSTM",
         "bilstm": "BiLSTM",
         "resnet1d": "ResNet1D",
-        "hmr_bilstm": "HMR-BiLSTM",
+        "hmr_bilstm": "ResMemECG",
     }
 
     cell_text = []
@@ -273,7 +273,7 @@ def main():
     fig_dir = Path("results/figures")
     fig_dir.mkdir(parents=True, exist_ok=True)
 
-    print("[Loading HMR-BiLSTM and test data]")
+    print("[Loading ResMemECG and test data]")
     try:
         test = np.load("data/processed/splits/inter_test.npz")
         X_test, y_test = test["X"], test["y"]
@@ -337,7 +337,7 @@ def main():
         "lstm": "LSTM",
         "bilstm": "BiLSTM",
         "resnet1d": "ResNet1D",
-        "hmr_bilstm": "HMR-BiLSTM",
+        "hmr_bilstm": "ResMemECG",
     }
     for name in order:
         if name not in all_results:

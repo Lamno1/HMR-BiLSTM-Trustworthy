@@ -1,6 +1,6 @@
 {
   "variant": "hmr_bilstm_rr",
-  "label": "HMR-BiLSTM + RR-interval (prototype)",
+  "label": "ResMemECG + RR-interval (prototype)",
   "n_params": 505326,
   "best_epoch": 16,
   "best_val_f1": 0.5335012596476575,

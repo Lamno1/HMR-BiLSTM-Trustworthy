@@ -1,4 +1,10 @@
-# HMR-BiLSTM: A Robust and Interpretable Hybrid Memory Residual BiLSTM Framework for ECG Arrhythmia Classification
+# ResMemECG: A Residual-Memory Recurrent Model for Inter-Patient ECG Arrhythmia Classification and Record-Grouped Rare-Class Evaluation
+
+> **Name history:** an earlier version of this work was presented at INDEA 2026
+> under the `HMR`&#8288;`-BiLSTM` name; the journal version is **ResMemECG**. The Python modules
+> (`hmr_bilstm.py` / `RLSTMClassifier`, `hmr_multipath.py` / `HMRMultiPath`) keep
+> their original identifiers; only the model/paper name and all human-readable
+> labels (docstrings, plot legends, table cells) were updated.
 
 > **Repository size note:** final rare-class predictions, models, and checkpoint
 > artifacts are committed for reproducibility. A future hosted remote may need
@@ -6,7 +12,7 @@
 
 ## Overview
 
-HMR-BiLSTM is a deep learning framework for ECG arrhythmia classification on the MIT-BIH Arrhythmia Database, evaluated under the strict **inter-patient** protocol (de Chazal et al., DS1/DS2), where no patient's beats appear in both training and test. The architecture targets three failure modes of plain LSTM baselines on this task: weak modelling of cell/hidden-state interaction, poor minority-class recall under extreme class imbalance, and no built-in way for a clinician to see why a beat was flagged.
+ResMemECG is a deep learning framework for ECG arrhythmia classification on the MIT-BIH Arrhythmia Database, evaluated under the strict **inter-patient** protocol (de Chazal et al., DS1/DS2), where no patient's beats appear in both training and test. The architecture targets three failure modes of plain LSTM baselines on this task: weak modelling of cell/hidden-state interaction, poor minority-class recall under extreme class imbalance, and no built-in way for a clinician to see why a beat was flagged.
 
 ### Key Components
 
@@ -46,7 +52,7 @@ Each beat is a 187-sample window (90 before, 97 after the annotated R-peak), res
 ## Project Structure
 
 ```
-HMR-BiLSTM/
+ResMemECG/
 │
 ├── data/
 │   ├── raw/                        # Raw PhysioNet MIT-BIH records (git-ignored)
@@ -79,7 +85,7 @@ HMR-BiLSTM/
 ├── compare_fgsm_baselines.py         # FGSM robustness across all baselines
 ├── evaluate_pgd.py                   # PGD-20 robustness
 ├── evaluate_autoattack.py            # AutoAttack (torchattacks) on canonical + ablation checkpoints
-├── evaluate_autoattack_baselines.py  # AutoAttack comparison across LSTM/BiLSTM/HMR-BiLSTM
+├── evaluate_autoattack_baselines.py  # AutoAttack comparison across LSTM/BiLSTM/ResMemECG
 ├── evaluate_robustness_all.py        # Gaussian noise robustness sweep
 ├── evaluate_calibration.py           # ECE / Brier / MCE / NLL / per-class conditional ECE
 ├── evaluate_trustworthiness.py       # Consolidated trustworthiness dashboard (T8)
@@ -118,8 +124,8 @@ HMR-BiLSTM/
 
 ```bash
 # Clone the repository
-git clone https://github.com/tn1-ai/HMR-BILSTM.git
-cd HMR-BILSTM
+git clone <RESMEMECG_REPOSITORY_URL>
+cd ResMemECG
 
 # Create and activate virtual environment (recommended)
 python -m venv venv
@@ -152,9 +158,9 @@ python validation/download_mitdb.py
 python validation/preprocess_aami.py
 ```
 
-#### 2. Train HMR-BiLSTM (Proposed Model) and Baselines
+#### 2. Train ResMemECG (Proposed Model) and Baselines
 ```bash
-python train_inter_patient.py     # HMR-BiLSTM, inter-patient protocol
+python train_inter_patient.py     # ResMemECG, inter-patient protocol
 python run_baselines.py           # Logistic Regression, Decision Tree, LSTM, BiLSTM, ResNet1D
 ```
 
@@ -175,7 +181,7 @@ python plot_case_visualization.py
 # Adversarial robustness
 python compare_fgsm_baselines.py
 python evaluate_pgd.py
-python evaluate_autoattack_baselines.py   # LSTM/BiLSTM/HMR-BiLSTM AutoAttack comparison
+python evaluate_autoattack_baselines.py   # LSTM/BiLSTM/ResMemECG AutoAttack comparison
 python robustness/cw_attack.py
 
 # Gaussian noise robustness
@@ -232,7 +238,10 @@ The ablation study (`run_ablation.py`) and the RR-interval/SMOTE prototype exper
 | LSTM | 0.832 | 0.434 | 0.863 |
 | BiLSTM | 0.851 | 0.433 | 0.833 |
 | ResNet1D | 0.869 | 0.437 | 0.831 |
-| **HMR-BiLSTM (Ours)** | **0.931** | **0.628** | **0.953** |
+| InceptionTime | 0.849 | 0.431 | 0.915 |
+| TCN | 0.837 | 0.452 | 0.919 |
+| ECG-Transformer | 0.790 | 0.405 | 0.810 |
+| **ResMemECG (Ours)** | **0.931** | **0.628** | **0.953** |
 
 Full tables (ablation, FGSM/PGD/AutoAttack, calibration, noise robustness) are in `results/tables/` and `latex/sn-article.tex`. Macro F1/S/F remain the main open problem — see the paper's Limitations and Future Work.
 
@@ -252,15 +261,15 @@ python train_rr_multiseed.py
 
 ## Keywords
 
-ECG Arrhythmia Classification, Interpretable AI, Trustworthy AI, Bidirectional LSTM, Residual Memory Control, Adversarial Robustness, FGSM, PGD, AutoAttack, Calibration, Uncertainty Quantification, Inter-Patient Evaluation, MIT-BIH
+ECG Arrhythmia Classification, ResMemECG, Residual Memory Control, Record-Grouped Cross-Validation, Rare-Class Generalisation, Interpretable AI, Trustworthy AI, Adversarial Robustness, FGSM, PGD, AutoAttack, Calibration, Uncertainty Quantification, Inter-Patient Evaluation, MIT-BIH
 
 ---
 
 ## Citation
 
 ```bibtex
-@article{hmr_bilstm_2026,
-  title={HMR-BiLSTM: A Robust and Interpretable Hybrid Memory Residual BiLSTM Framework for ECG Arrhythmia Classification},
+@article{resmemecg_2026,
+  title={ResMemECG: A Residual-Memory Recurrent Model for Inter-Patient ECG Arrhythmia Classification and Record-Grouped Rare-Class Evaluation},
   author={Nguyen, Quoc Hung and Luu Nguyen, Dai Phong and Tran, Khoi Nguyen and Le, Dang Tho and Le, My Phung and Nguyen, Van Thong},
   year={2026}
 }

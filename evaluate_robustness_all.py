@@ -112,24 +112,24 @@ def main():
         print("[WARNING] best_bilstm.pt not found. Skipping BiLSTM.")
         results["BiLSTM"] = [0.0] * len(noise_levels)
     
-    # 5. HMR-BiLSTM
-    print("\n[Evaluating HMR-BiLSTM]")
+    # 5. ResMemECG
+    print("\n[Evaluating ResMemECG]")
     # Guard against missing checkpoints
     rlstm_ckpt = Path("results/checkpoints/inter_best_rlstm.pt")
     if rlstm_ckpt.exists():
         input_size = X_te.shape[-1] if len(X_te.shape) > 2 else 1
         hmr_bilstm, _ = load_hmr_bilstm(str(rlstm_ckpt), device, input_size)
-        results["HMR-BiLSTM"] = evaluate_torch_model_noise(hmr_bilstm, X_te, y_te, device, noise_levels, is_rlstm=True)
+        results["ResMemECG"] = evaluate_torch_model_noise(hmr_bilstm, X_te, y_te, device, noise_levels, is_rlstm=True)
     else:
-        print("[WARNING] inter_best_rlstm.pt not found. Skipping HMR-BiLSTM.")
-        results["HMR-BiLSTM"] = [0.0] * len(noise_levels)
+        print("[WARNING] inter_best_rlstm.pt not found. Skipping ResMemECG.")
+        results["ResMemECG"] = [0.0] * len(noise_levels)
     
     # Print results table
     print("\n" + "="*80)
-    print(f"{'Noise Std':<10} | {'LR':<10} | {'DT':<10} | {'LSTM':<10} | {'BiLSTM':<10} | {'HMR-BiLSTM':<10}")
+    print(f"{'Noise Std':<10} | {'LR':<10} | {'DT':<10} | {'LSTM':<10} | {'BiLSTM':<10} | {'ResMemECG':<10}")
     print("-" * 80)
     for i, std in enumerate(noise_levels):
-        print(f"{std:<10.2f} | {results['LR'][i]:<10.4f} | {results['DT'][i]:<10.4f} | {results['LSTM'][i]:<10.4f} | {results['BiLSTM'][i]:<10.4f} | {results['HMR-BiLSTM'][i]:<10.4f}")
+        print(f"{std:<10.2f} | {results['LR'][i]:<10.4f} | {results['DT'][i]:<10.4f} | {results['LSTM'][i]:<10.4f} | {results['BiLSTM'][i]:<10.4f} | {results['ResMemECG'][i]:<10.4f}")
         
     # Plotting
     fig_dir = Path("results/figures")
@@ -137,10 +137,10 @@ def main():
     save_path = fig_dir / "robustness_noise_all.png"
     
     fig, ax = plt.subplots(figsize=(9, 6))
-    colors = {"LR": "#9E9E9E", "DT": "#FFA726", "LSTM": "#42A5F5", "BiLSTM": "#5C6BC0", "HMR-BiLSTM": "#43A047"}
-    markers = {"LR": "v", "DT": "^", "LSTM": "x", "BiLSTM": "d", "HMR-BiLSTM": "o"}
+    colors = {"LR": "#9E9E9E", "DT": "#FFA726", "LSTM": "#42A5F5", "BiLSTM": "#5C6BC0", "ResMemECG": "#43A047"}
+    markers = {"LR": "v", "DT": "^", "LSTM": "x", "BiLSTM": "d", "ResMemECG": "o"}
     
-    for model_name in ["LR", "DT", "LSTM", "BiLSTM", "HMR-BiLSTM"]:
+    for model_name in ["LR", "DT", "LSTM", "BiLSTM", "ResMemECG"]:
         ax.plot(noise_levels, results[model_name], marker=markers[model_name], 
                 linewidth=2, color=colors[model_name], label=model_name)
     

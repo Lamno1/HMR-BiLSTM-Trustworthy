@@ -1,7 +1,7 @@
 """
 hmr_bilstm_rr.py
 =================
-Prototype: HMR-BiLSTM full architecture + RR-interval side input.
+Prototype: ResMemECG full architecture + RR-interval side input.
 
 Reuses the exact CNN / BiRLSTM / AttentionPooling building blocks from
 hmr_bilstm_ablation.py (use_rmc=True, use_hybrid=True, use_cnn=True,

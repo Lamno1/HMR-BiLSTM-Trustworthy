@@ -320,8 +320,8 @@ def load_baseline_model(checkpoint_path, device):
 
 def plot_comparison(comparison_results, output_dir: Path):
     fig, ax = plt.subplots(figsize=(10, 6))
-    colors = {"LSTM": "#1f77b4", "BiLSTM": "#ff7f0e", "HMR-BiLSTM": "#2ca02c"}
-    markers = {"LSTM": "o", "BiLSTM": "s", "HMR-BiLSTM": "^"}
+    colors = {"LSTM": "#1f77b4", "BiLSTM": "#ff7f0e", "ResMemECG": "#2ca02c"}
+    markers = {"LSTM": "o", "BiLSTM": "s", "ResMemECG": "^"}
     for model_name, results in comparison_results.items():
         epsilons = [r["epsilon"] for r in results]
         macro_f1 = [r["macro_f1"] for r in results]
@@ -386,7 +386,7 @@ def compare_models(models, epsilons, device, test_loader, output_dir: Path):
     # ============================================================
     # ĐÁNH GIÁ CÁC MODEL
     # ============================================================
-    # Per-model criterion: HMR-BiLSTM uses FocalLoss (matches training);
+    # Per-model criterion: ResMemECG uses FocalLoss (matches training);
     # LSTM/BiLSTM use CrossEntropyLoss (they were trained with CE, not Focal).
     baseline_criterion = RLSTMLoss(lambda_smooth=0.0, class_weights=class_weights,
                                    use_focal=False)
@@ -399,7 +399,7 @@ def compare_models(models, epsilons, device, test_loader, output_dir: Path):
             continue
         print(f"\n[Evaluating {model_name}]")
         try:
-            if model_name == "HMR-BiLSTM":
+            if model_name == "ResMemECG":
                 model, _ = load_hmr_bilstm(checkpoint_path, device)
                 model_criterion = criterion
             else:
@@ -436,14 +436,14 @@ def compare_models(models, epsilons, device, test_loader, output_dir: Path):
         json.dump(comparison_results, f, indent=2)
     print(f"Saved alias: {alias_path}")
 
-    # Update fgsm_results.json with the HMR-BiLSTM single-model results
+    # Update fgsm_results.json with the ResMemECG single-model results
     # so it stays current with the latest inter-patient checkpoint.
-    if "HMR-BiLSTM" in comparison_results:
-        hmr_results = comparison_results["HMR-BiLSTM"]
+    if "ResMemECG" in comparison_results:
+        hmr_results = comparison_results["ResMemECG"]
         fgsm_json = Path("results/logs/fgsm_results.json")
         with open(fgsm_json, "w", encoding="utf-8") as f:
             json.dump(hmr_results, f, indent=2)
-        print(f"Updated fgsm_results.json from HMR-BiLSTM compare run: {fgsm_json}")
+        print(f"Updated fgsm_results.json from ResMemECG compare run: {fgsm_json}")
 
     plot_comparison(comparison_results, output_dir)
     generate_table(comparison_results, output_dir)
@@ -530,7 +530,7 @@ def main():
                         help="Batch size for test evaluation")
     parser.add_argument("--output-dir", default="results/figures",
                         help="Directory to save FGSM figures and results")
-    parser.add_argument("--compare", action="store_true", help="Run comparison across baseline models (LSTM, BiLSTM, HMR-BiLSTM)")
+    parser.add_argument("--compare", action="store_true", help="Run comparison across baseline models (LSTM, BiLSTM, ResMemECG)")
     args = parser.parse_args()
 
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
@@ -546,7 +546,7 @@ def main():
         models = {
             "LSTM": "results/checkpoints/best_lstm.pt",
             "BiLSTM": "results/checkpoints/best_bilstm.pt",
-            "HMR-BiLSTM": "results/checkpoints/inter_best_rlstm.pt",
+            "ResMemECG": "results/checkpoints/inter_best_rlstm.pt",
         }
         compare_models(models, args.epsilons, device, test_loader, Path(args.output_dir))
         return

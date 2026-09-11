@@ -1,7 +1,7 @@
 """
 T2 — SHAP GradientExplainer for Trustworthy ECG Classification.
 
-Uses GradientExplainer (vs DeepExplainer) because HMR-BiLSTM contains
+Uses GradientExplainer (vs DeepExplainer) because ResMemECG contains
 LayerNorm layers that DeepExplainer cannot handle correctly.
 GradientExplainer works with any differentiable PyTorch function.
 

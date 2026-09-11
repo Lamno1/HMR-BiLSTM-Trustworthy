@@ -1,5 +1,5 @@
 """
-HMR-BiLSTM: Bidirectional LSTM with Hybrid Memory Control
+ResMemECG: Bidirectional LSTM with Hybrid Memory Control
 ========================================================
 
 Kiến trúc: Hybrid Memory Path
@@ -55,11 +55,11 @@ class AttentionPooling(nn.Module):
 
 
 # =============================================================================
-#  HMR-BiLSTM CELL — Phương án B (Hybrid Memory Path)
+#  ResMemECG CELL — Phương án B (Hybrid Memory Path)
 # =============================================================================
 class RLSTMCell(nn.Module):
     """
-    HMR-BiLSTM cell với Hybrid Memory Path:
+    ResMemECG cell với Hybrid Memory Path:
     - RMC path: softmax attention blend của c_keep và c_add
     - LSTM path: standard memory update f_t * c_prev + i_t * g_t
     - Blend qua learnable beta gate
@@ -193,7 +193,7 @@ class RLSTMCell(nn.Module):
 
 
 # =============================================================================
-#  HMR-BiLSTM LAYER
+#  ResMemECG LAYER
 # =============================================================================
 class RLSTMLayer(nn.Module):
     def __init__(self, input_size, hidden_size, dropout=0.1):
@@ -226,11 +226,11 @@ class RLSTMLayer(nn.Module):
 
 
 # =============================================================================
-#  BIDIRECTIONAL HMR-BiLSTM (Multi-layer support)
+#  BIDIRECTIONAL ResMemECG (Multi-layer support)
 # =============================================================================
 class BiRLSTM(nn.Module):
     """
-    Bidirectional HMR-BiLSTM with optional multi-layer stacking.
+    Bidirectional ResMemECG with optional multi-layer stacking.
     - num_layers=1: backward-compatible with original single-layer design.
     - num_layers>1: stacks BiRLSTM layers with inter-layer dropout,
       analogous to nn.LSTM(num_layers=N).
@@ -285,7 +285,7 @@ class BiRLSTM(nn.Module):
 
 
 # =============================================================================
-#  CLASSIFIER với CNN + HMR-BiLSTM + ATTENTION POOLING
+#  CLASSIFIER với CNN + ResMemECG + ATTENTION POOLING
 # =============================================================================
 class RLSTMClassifier(nn.Module):
     def __init__(
@@ -431,7 +431,7 @@ if __name__ == "__main__":
 
     # --- Test 1: Single-layer (backward-compatible) ---
     print("=" * 50)
-    print("Test 1: Single-layer HMR-BiLSTM (default)")
+    print("Test 1: Single-layer ResMemECG (default)")
     model = RLSTMClassifier(input_size=D, hidden_size=96, num_classes=5)
     x = torch.randn(B, T, D)
     y = torch.randint(0, 5, (B,))
@@ -449,7 +449,7 @@ if __name__ == "__main__":
 
     # --- Test 2: Multi-layer (num_layers=2) ---
     print("\n" + "=" * 50)
-    print("Test 2: Multi-layer HMR-BiLSTM (num_layers=2)")
+    print("Test 2: Multi-layer ResMemECG (num_layers=2)")
     model2 = RLSTMClassifier(
         input_size=D, hidden_size=96, num_classes=5, num_layers=2
     )

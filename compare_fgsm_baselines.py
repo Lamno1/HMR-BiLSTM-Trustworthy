@@ -16,8 +16,8 @@ from evaluate_fgsm import evaluate_fgsm, build_test_loader
 MODEL_SPECS = {
     "LSTM": Path("results/checkpoints/best_lstm.pt"),
     "BiLSTM": Path("results/checkpoints/best_bilstm.pt"),
-    "HMR-BiLSTM (no Adv)": Path("results/ablation/checkpoints/best_rlstm_no_adv.pt"),
-    "HMR-BiLSTM": Path("results/checkpoints/best_rlstm.pt"),
+    "ResMemECG (no Adv)": Path("results/ablation/checkpoints/best_rlstm_no_adv.pt"),
+    "ResMemECG": Path("results/checkpoints/best_rlstm.pt"),
 }
 
 DEFAULT_EPSILONS = [0.0, 0.02, 0.05]
@@ -27,7 +27,7 @@ def load_baseline_model(name, checkpoint_path: Path, device):
     if not checkpoint_path.exists():
         raise FileNotFoundError(f"Checkpoint not found: {checkpoint_path}")
 
-    if name.startswith("HMR-BiLSTM"):
+    if name.startswith("ResMemECG"):
         model, _ = load_hmr_bilstm(str(checkpoint_path), device)
         return model
 
@@ -121,7 +121,7 @@ def plot_per_class_recall_bars(results, output_dir: Path, attack_epsilon=0.02):
     PALETTE = {
         "LSTM":       ("#1f77b4", "#aec7e8"),
         "BiLSTM":     ("#ff7f0e", "#ffbb78"),
-        "HMR-BiLSTM": ("#2ca02c", "#98df8a"),
+        "ResMemECG": ("#2ca02c", "#98df8a"),
     }
 
     n_classes = len(classes)
@@ -259,7 +259,7 @@ def main():
     else:
         class_weights = None
 
-    # HMR-BiLSTM was trained with FocalLoss; LSTM/BiLSTM were trained with CrossEntropyLoss.
+    # ResMemECG was trained with FocalLoss; LSTM/BiLSTM were trained with CrossEntropyLoss.
     # Using the wrong loss for FGSM perturbation generation biases the gradient direction.
     hmr_criterion = RLSTMLoss(
         lambda_smooth=0.003,
@@ -289,8 +289,8 @@ def main():
             print(f"  Failed to load {model_name}: {exc}")
             continue
 
-        criterion = hmr_criterion if model_name.startswith("HMR-BiLSTM") else baseline_criterion
-        print(f"  Criterion: {'FocalLoss' if model_name.startswith('HMR-BiLSTM') else 'CrossEntropyLoss'}")
+        criterion = hmr_criterion if model_name.startswith("ResMemECG") else baseline_criterion
+        print(f"  Criterion: {'FocalLoss' if model_name.startswith('ResMemECG') else 'CrossEntropyLoss'}")
 
         for epsilon in DEFAULT_EPSILONS:
             print(f"  Evaluating {model_name} @ epsilon={epsilon}")

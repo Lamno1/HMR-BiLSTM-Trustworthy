@@ -1,6 +1,6 @@
 # Agent entry point
 
-This repo is the HMR-BiLSTM ECG paper + an active R&D effort to fix the rare
+This repo is the ResMemECG ECG paper + an active R&D effort to fix the rare
 classes (F = fusion beats, S = supraventricular). N and V are already solved.
 
 ## Before doing rare-class (F/S) work, READ:

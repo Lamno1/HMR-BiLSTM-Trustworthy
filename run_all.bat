@@ -1,6 +1,6 @@
 @echo off
 REM ============================================================
-REM HMR-BiLSTM: Complete Pipeline Execution
+REM ResMemECG: Complete Pipeline Execution
 REM ============================================================
 
 set PY=python
@@ -28,7 +28,7 @@ if errorlevel 1 goto error
 
 echo.
 echo ============================================================
-echo  STEP 3: Train HMR-BiLSTM (Main Model - inter-patient)
+echo  STEP 3: Train ResMemECG (Main Model - inter-patient)
 echo ============================================================
 %PY% train_inter_patient.py
 if errorlevel 1 goto error

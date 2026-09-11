@@ -94,7 +94,7 @@ def get_classifier_gradient(model, x, y, criterion, device):
         if "classifier" in name and param.grad is not None:
             grads.append(param.grad.detach().view(-1).cpu())
 
-    # Safety fallback — should not trigger with HMR-BiLSTM
+    # Safety fallback — should not trigger with ResMemECG
     if not grads:
         raise RuntimeError(
             "No 'classifier' parameters found with gradients. "

@@ -56,7 +56,7 @@ def main():
     print(f"Device: {device} (CPU forced — GPU reserved for ensemble training) | Run ID: {run_id}")
 
     # Load model
-    print("Loading HMR-BiLSTM model...")
+    print("Loading ResMemECG model...")
     model, _ = load_hmr_bilstm(RLSTM_CKPT, device)
     model.eval()
 
@@ -175,7 +175,7 @@ def main():
         ax.spines["left"].set_color("#555555")
         ax.spines["right"].set_color("#555555")
 
-    plt.suptitle("HMR-BiLSTM: Sensitivity to Signal Degradation (Corruptions)", 
+    plt.suptitle("ResMemECG: Sensitivity to Signal Degradation (Corruptions)", 
                  color="white", fontsize=15, fontweight="bold", y=0.98)
     plt.tight_layout(rect=[0, 0.03, 1, 0.95])
     

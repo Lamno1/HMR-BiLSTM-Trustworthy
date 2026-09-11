@@ -1,5 +1,5 @@
 """
-hmr_hd.py  —  HMR-BiLSTM with a differentiable HIERARCHICAL decision head.
+hmr_hd.py  —  ResMemECG with a differentiable HIERARCHICAL decision head.
 ========================================================================
 Motivation (measured, see memory project_fclass_root_cause_diagnostics):
   The official model has AUC_F = 0.959 but F1-F = 0.241. The discriminative

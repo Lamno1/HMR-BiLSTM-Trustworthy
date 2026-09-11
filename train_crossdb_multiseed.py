@@ -3,7 +3,7 @@ train_crossdb_multiseed.py  (v2, 2026-08-28)
 ===========================================
 Stage A of the cross-database plan (see memory project_fclass_root_cause_diagnostics).
 
-Plain HMR-BiLSTM, architecture and recipe BYTE-FOR-BYTE the official
+Plain ResMemECG, architecture and recipe BYTE-FOR-BYTE the official
 train_inter_patient.py (same functions imported directly), trained on the fixed-v2
 cross-database split (data/processed/splits_rr_crossdb/), model-selected on the
 patient-diverse validation set, evaluated on BOTH:
@@ -173,7 +173,7 @@ def summarize(out_dir, seeds):
     if not rows:
         print("[summary] no seeds done")
         return
-    print(f"\n{'='*94}\n  CROSS-DB HMR-BiLSTM (v2)  --  {len(rows)}/{len(seeds)} seeds\n{'='*94}")
+    print(f"\n{'='*94}\n  CROSS-DB ResMemECG (v2)  --  {len(rows)}/{len(seeds)} seeds\n{'='*94}")
     for tag in ["test_mitbih_ds2", "test_incart"]:
         if tag not in rows[0]:
             continue

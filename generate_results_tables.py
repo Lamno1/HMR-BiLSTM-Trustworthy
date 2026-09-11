@@ -46,7 +46,10 @@ if baseline_file.exists():
         "lstm": "LSTM",
         "bilstm": "BiLSTM",
         "resnet1d": "ResNet1D",
-        "hmr_bilstm": "HMR-BiLSTM",
+        "inceptiontime": "InceptionTime",
+        "tcn": "TCN",
+        "ecg_transformer": "ECG-Transformer",
+        "hmr_bilstm": "ResMemECG",
     }
     for k, v in baseline_data.items():
         if k in pretty:
@@ -92,7 +95,7 @@ if (TABLES_DIR / "fgsm_baseline_summary.csv").exists():
 elif Path("results/logs/fgsm_comparison_results.json").exists():
     with open("results/logs/fgsm_comparison_results.json") as _f:
         _fgsm_cmp = json.load(_f)
-    _name_map = {"HMR-BiLSTM": "HMR-BiLSTM", "LSTM": "LSTM", "BiLSTM": "BiLSTM"}
+    _name_map = {"ResMemECG": "ResMemECG", "LSTM": "LSTM", "BiLSTM": "BiLSTM"}
     for _raw_name, _eps_list in _fgsm_cmp.items():
         _name = _name_map.get(_raw_name, _raw_name)
         _entry = _fgsm_from_eps_list(_eps_list)
@@ -103,7 +106,7 @@ elif Path("results/logs/fgsm_results.json").exists():
         _fgsm_list = json.load(_f)
     _entry = _fgsm_from_eps_list(_fgsm_list)
     if _entry:
-        FGSM["HMR-BiLSTM"] = _entry
+        FGSM["ResMemECG"] = _entry
 
 CALIB = {}
 if (TABLES_DIR / "calibration_results.csv").exists():
@@ -331,7 +334,7 @@ def table_consolidated():
     header = ["Model", "Accuracy", "F1-macro", "AUC",
               "FGSM-F1", "FGSM-drop", "PGD-F1", "PGD-drop",
               "ECE", "Brier"]
-    deep_models = ["LSTM", "BiLSTM", "HMR-BiLSTM"]
+    deep_models = ["LSTM", "BiLSTM", "ResMemECG"]
 
     # Ensure all data sources are populated before accessing dict
     # Nếu bất kỳ CSV nào chưa generate → KeyError crash. Thay bằng graceful skip.
@@ -376,8 +379,8 @@ def table_consolidated():
 # PRIORITY 2 – Combined Summary Figure
 # ==============================================================================
 
-COLORS = {"LSTM": "#1f77b4", "BiLSTM": "#ff7f0e", "HMR-BiLSTM": "#2ca02c"}
-MODELS = ["LSTM", "BiLSTM", "HMR-BiLSTM"]
+COLORS = {"LSTM": "#1f77b4", "BiLSTM": "#ff7f0e", "ResMemECG": "#2ca02c"}
+MODELS = ["LSTM", "BiLSTM", "ResMemECG"]
 X = np.arange(len(MODELS))
 W = 0.55
 

@@ -1,5 +1,5 @@
 # -*- coding: utf-8 -*-
-"""Generate HMR-BiLSTM_Installation_Guide.docx"""
+"""Generate ResMemECG_Installation_Guide.docx"""
 
 from docx import Document
 from docx.shared import Pt, RGBColor, Inches, Cm
@@ -128,7 +128,7 @@ for run in t.runs:
 p = doc.add_paragraph()
 p.alignment = WD_ALIGN_PARAGRAPH.CENTER
 run = p.add_run(
-    "Project: HMR-BiLSTM \u2013 A Trustworthy and Explainable "
+    "Project: ResMemECG \u2013 A Trustworthy and Explainable "
     "Hybrid Memory Residual BiLSTM Framework for ECG Arrhythmia Classification"
 )
 run.bold = True
@@ -141,7 +141,7 @@ spacer()
 # ══════════════════════════════════════════════════════════════════════════════
 h1("1. Overview")
 para(
-    "This guide explains how to set up and run the HMR-BiLSTM project on a "
+    "This guide explains how to set up and run the ResMemECG project on a "
     "local machine (Windows or Linux/macOS) using Python and PyTorch (CPU or GPU)."
 )
 para(
@@ -199,7 +199,7 @@ spacer()
 # ══════════════════════════════════════════════════════════════════════════════
 h1("4. Project Directory Structure")
 tree = [
-    "HMR-BiLSTM/",
+    "ResMemECG/",
     "\u251c\u2500\u2500 data/",
     "\u2502   \u251c\u2500\u2500 raw/                   # Raw MIT-BIH CSV files (git-ignored)",
     "\u2502   \u2514\u2500\u2500 processed/             # Pre-processed splits + class weights",
@@ -271,7 +271,7 @@ code("unzip heartbeat.zip -d data/raw/")
 spacer()
 h2("Required Folder Structure After Download")
 for line in [
-    "HMR-BiLSTM/",
+    "ResMemECG/",
     "\u2514\u2500\u2500 data/",
     "    \u2514\u2500\u2500 raw/",
     "        \u251c\u2500\u2500 mitbih_train.csv",
@@ -291,8 +291,8 @@ spacer()
 h1("6. Setup Steps")
 
 h2("Step 1: Clone the Repository")
-code("git clone https://github.com/Lamno1/HMR-BiLSTM-Trustworthy.git")
-code("cd HMR-BiLSTM-Trustworthy")
+code("git clone <RESMEMECG_REPOSITORY_URL>")
+code("cd ResMemECG")
 
 h2("Step 2: Create a Virtual Environment (Recommended)")
 para("Windows:", bold=True, size=10)
@@ -315,7 +315,7 @@ para(
     size=11,
 )
 
-h2("Step 5: Train the Proposed HMR-BiLSTM Model")
+h2("Step 5: Train the Proposed ResMemECG Model")
 code("python train.py")
 para(
     "Trains with adversarial FGSM, focal loss, cosine-annealing LR, and early stopping. "
@@ -386,8 +386,8 @@ para(
     "To reload a trained model for evaluation:"
 )
 code("import torch")
-code("from hmr_bilstm import HMRBiLSTM")
-code("model = HMRBiLSTM(...)  # same hyperparameters as training")
+code("from hmr_bilstm import ResMemECG")
+code("model = ResMemECG(...)  # same hyperparameters as training")
 code('checkpoint = torch.load("results/checkpoints/best_rlstm.pt")')
 code('model.load_state_dict(checkpoint["model_state_dict"])')
 code("model.eval()")
@@ -451,6 +451,6 @@ run.font.size = Pt(10)
 run.font.color.rgb = GRAY
 
 # ── Save
-OUT = r"d:\HMR-BiLSTM-main\HMR-BiLSTM_Installation_Guide.docx"
+OUT = r"d:\HMR-BiLSTM-main\ResMemECG_Installation_Guide.docx"
 doc.save(OUT)
 print(f"Saved: {OUT}")

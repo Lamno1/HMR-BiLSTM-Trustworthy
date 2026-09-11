@@ -1,9 +1,9 @@
 """
 evaluate_autoattack_baselines.py
 ==================================
-Run AutoAttack across LSTM, BiLSTM, and the canonical HMR-BiLSTM on the exact
+Run AutoAttack across LSTM, BiLSTM, and the canonical ResMemECG on the exact
 same stratified subset, so the paper's robustness table has a like-for-like
-AutoAttack comparison instead of HMR-BiLSTM alone.
+AutoAttack comparison instead of ResMemECG alone.
 
 Reuses the existing, already-verified building blocks rather than
 duplicating them:
@@ -17,7 +17,7 @@ Same eps/data-range/4-target-class-cap protocol as robustness/auto_attack.py,
 attacking a stratified subset of the FULL test set (not filtered to
 correctly-classified beats). Uses a LIGHTER "custom" AutoAttack ensemble
 (APGD-CE + Square, reduced restarts/iterations/queries) rather than the full
-4-attack "standard" ensemble -- HMR-BiLSTM's hand-rolled RLSTMCell (no cuDNN
+4-attack "standard" ensemble -- ResMemECG's hand-rolled RLSTMCell (no cuDNN
 fast path) made "standard" too slow to finish within this environment's
 background-task time limit even on a reduced subset. This still exercises
 both a white-box gradient attack and a black-box query attack, which is what
@@ -28,7 +28,7 @@ Output: results/robustness/autoattack_baseline_comparison.csv
 
 Cach chay:
     python evaluate_autoattack_baselines.py --models LSTM BiLSTM   # fast
-    python evaluate_autoattack_baselines.py --models HMR-BiLSTM    # slow
+    python evaluate_autoattack_baselines.py --models ResMemECG    # slow
 """
 
 import argparse
@@ -51,7 +51,7 @@ AA_NORM = "Linf"
 PGD_ALPHA = AA_EPS / 4
 PGD_STEPS = 20
 N_EVAL = 80  # reduced from 200: full-ensemble AutoAttack on the hand-rolled
-             # HMR-BiLSTM cell (no cuDNN fast path) is slow enough per-sample
+             # ResMemECG cell (no cuDNN fast path) is slow enough per-sample
              # that 200 didn't finish within this environment's background-task
              # time limit; 80 keeps a legitimate stratified subset while fitting
 SEED = 42
@@ -126,7 +126,7 @@ def evaluate_one_model(name, model, X_sub, y_sub, data_min, data_max, device):
 
     from pyautoattack import AutoAttack
     # "standard" (APGD-CE, APGD-DLR, FAB, Square with n_restarts=5/n_iter=100/
-    # n_queries=5000) is far too expensive for HMR-BiLSTM's hand-rolled
+    # n_queries=5000) is far too expensive for ResMemECG's hand-rolled
     # RLSTMCell (no cuDNN fast path) to finish within this environment's
     # background-task time limit. We use a lighter "custom" ensemble instead:
     # APGD-CE (white-box, gradient-based) + Square (black-box, query-based),
@@ -188,8 +188,8 @@ def save_results(all_results, out_dir):
 
 
 def main():
-    parser = argparse.ArgumentParser(description="AutoAttack comparison across LSTM/BiLSTM/HMR-BiLSTM")
-    parser.add_argument("--models", nargs="*", default=["LSTM", "BiLSTM", "HMR-BiLSTM"],
+    parser = argparse.ArgumentParser(description="AutoAttack comparison across LSTM/BiLSTM/ResMemECG")
+    parser.add_argument("--models", nargs="*", default=["LSTM", "BiLSTM", "ResMemECG"],
                         help="Subset of models to (re-)run; others already in the output are kept as-is.")
     args = parser.parse_args()
 
@@ -220,7 +220,7 @@ def main():
 
     # Draw the stratified subset ONCE from a fresh, fixed-seed RNG so every
     # model -- regardless of which --models subset is (re-)run, or in what
-    # order -- is attacked on the exact same 167 test beats.
+    # order -- is attacked on the exact same selected stratified subset.
     rng = np.random.default_rng(SEED)
     X_sub, y_sub, _ = select_stratified_subset(X_test, y_test, N_EVAL, rng)
     print(f"  Shared stratified subset: {len(X_sub)} samples")
@@ -228,7 +228,7 @@ def main():
     models_info = {
         "LSTM": "results/checkpoints/best_lstm.pt",
         "BiLSTM": "results/checkpoints/best_bilstm.pt",
-        "HMR-BiLSTM": "results/checkpoints/inter_best_rlstm.pt",
+        "ResMemECG": "results/checkpoints/inter_best_rlstm.pt",
     }
 
     for name in args.models:
@@ -239,13 +239,13 @@ def main():
         if not Path(ckpt_path).exists():
             print(f"[SKIP] {name}: checkpoint not found at {ckpt_path}")
             continue
-        if name == "HMR-BiLSTM":
+        if name == "ResMemECG":
             model, _ = load_hmr_bilstm(ckpt_path, device)
         else:
             model, _ = load_baseline_model(ckpt_path, device)
         result = evaluate_one_model(name, model, X_sub, y_sub, data_min, data_max, device)
         results_by_model[name] = result
-        # Save immediately after each model so a kill mid-run (HMR-BiLSTM's
+        # Save immediately after each model so a kill mid-run (ResMemECG's
         # AutoAttack is slow -- hand-rolled cell, no cuDNN fast path) doesn't
         # lose already-completed models.
         save_results(list(results_by_model.values()), out_dir)

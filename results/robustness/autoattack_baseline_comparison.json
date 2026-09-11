@@ -22,7 +22,7 @@
     "masking_gap_aa_minus_pgd": 0.0
   },
   {
-    "model": "HMR-BiLSTM",
+    "model": "ResMemECG",
     "n_subset": 71,
     "clean_acc": 0.5775,
     "clean_f1_macro": 0.464,

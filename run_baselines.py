@@ -12,6 +12,7 @@ Cách chạy:
 
 import time
 import json
+import math
 import numpy as np
 import torch
 import torch.nn as nn
@@ -190,13 +191,13 @@ def run_decision_tree(train, test):
 
 # ─── LSTM baselines ───
 class LSTMBaseline(nn.Module):
-    """LSTM/BiLSTM baseline với CNN feature extractor (để fair so với HMR-BiLSTM)."""
+    """LSTM/BiLSTM baseline với CNN feature extractor (để fair so với ResMemECG)."""
 
     def __init__(self, input_size, hidden_size=96, bidirectional=False,
                  dropout=0.25, num_classes=5, cnn_out_channels=64):
         super().__init__()
 
-        # CNN feature extractor (giống HMR-BiLSTM để fair)
+        # CNN feature extractor (giống ResMemECG để fair)
         self.cnn = nn.Sequential(
             nn.Conv1d(input_size, 32, kernel_size=5, padding=2),
             nn.BatchNorm1d(32),
@@ -221,7 +222,7 @@ class LSTMBaseline(nn.Module):
 
         out_dim = hidden_size * (2 if bidirectional else 1)
 
-        # Attention pooling (giống HMR-BiLSTM để fair)
+        # Attention pooling (giống ResMemECG để fair)
         self.attention = nn.Sequential(
             nn.Linear(out_dim, out_dim // 2),
             nn.Tanh(),
@@ -283,7 +284,7 @@ class ResNet1D(nn.Module):
     ResNet1D baseline — 1D residual network cho ECG classification.
     Kiến trúc gần với Kiranyaz et al. (2016) và Wang et al. (2017):
     stem Conv → 4 residual blocks (64 ch) → global avg pool → classifier.
-    ~220K params, so sánh được với HMR-BiLSTM (~505K).
+    ~220K params, so sánh được với ResMemECG (~505K).
     """
     def __init__(self, input_size=1, num_classes=5, base_ch=64, dropout=0.25):
         super().__init__()
@@ -320,12 +321,218 @@ class ResNet1D(nn.Module):
         return self.classifier(x)
 
 
+# ─── InceptionTime baseline ───
+
+class InceptionModule(nn.Module):
+    """One Inception module: bottleneck + parallel multi-scale convs + pool branch."""
+    def __init__(self, in_channels, n_filters=24, kernel_sizes=(9, 19, 39)):
+        super().__init__()
+        self.use_bottleneck = in_channels > 1
+        conv_in = n_filters if self.use_bottleneck else in_channels
+        if self.use_bottleneck:
+            self.bottleneck = nn.Conv1d(in_channels, n_filters, kernel_size=1, bias=False)
+
+        self.convs = nn.ModuleList([
+            nn.Conv1d(conv_in, n_filters, kernel_size=k, padding=k // 2, bias=False)
+            for k in kernel_sizes
+        ])
+        self.pool = nn.MaxPool1d(kernel_size=3, stride=1, padding=1)
+        self.pool_conv = nn.Conv1d(in_channels, n_filters, kernel_size=1, bias=False)
+
+        self.out_channels = n_filters * (len(kernel_sizes) + 1)
+        self.bn = nn.BatchNorm1d(self.out_channels)
+
+    def forward(self, x):
+        x_in = self.bottleneck(x) if self.use_bottleneck else x
+        branches = [conv(x_in) for conv in self.convs]
+        branches.append(self.pool_conv(self.pool(x)))
+        out = torch.cat(branches, dim=1)
+        return torch.relu(self.bn(out))
+
+
+class InceptionTime(nn.Module):
+    """
+    InceptionTime baseline (Ismail Fawaz et al., 2020, "InceptionTime: Finding
+    AlexNet for Time Series Classification"). Stack of Inception modules with
+    a residual shortcut every 3 modules, global average pooling, classifier head.
+    """
+    def __init__(self, input_size=1, num_classes=5, n_filters=24, depth=6, dropout=0.25):
+        super().__init__()
+        self.modules_list = nn.ModuleList()
+        self.shortcuts = nn.ModuleList()
+
+        in_ch = input_size
+        shortcut_in_ch = input_size
+        for d in range(depth):
+            module = InceptionModule(in_ch, n_filters=n_filters)
+            self.modules_list.append(module)
+            in_ch = module.out_channels
+            if (d + 1) % 3 == 0:
+                self.shortcuts.append(nn.Sequential(
+                    nn.Conv1d(shortcut_in_ch, in_ch, kernel_size=1, bias=False),
+                    nn.BatchNorm1d(in_ch),
+                ))
+                shortcut_in_ch = in_ch
+
+        self.classifier = nn.Sequential(
+            nn.AdaptiveAvgPool1d(1),
+            nn.Flatten(),
+            nn.Dropout(dropout),
+            nn.Linear(in_ch, in_ch // 2),
+            nn.ReLU(),
+            nn.Dropout(dropout * 0.5),
+            nn.Linear(in_ch // 2, num_classes),
+        )
+
+    def forward(self, x):
+        x = x.transpose(1, 2)  # (B, T, 1) → (B, 1, T)
+        residual = x
+        shortcut_idx = 0
+        for d, module in enumerate(self.modules_list):
+            x = module(x)
+            if (d + 1) % 3 == 0:
+                residual = self.shortcuts[shortcut_idx](residual)
+                x = torch.relu(x + residual)
+                residual = x
+                shortcut_idx += 1
+        return self.classifier(x)
+
+
+# ─── TCN baseline ───
+
+class TCNBlock(nn.Module):
+    """Dilated causal residual block (Bai, Kolter & Koltun, 2018)."""
+    def __init__(self, in_channels, out_channels, kernel_size=7, dilation=1, dropout=0.2):
+        super().__init__()
+        pad = (kernel_size - 1) * dilation
+        self.pad = pad
+        self.conv1 = nn.Conv1d(in_channels, out_channels, kernel_size, padding=pad, dilation=dilation)
+        self.bn1 = nn.BatchNorm1d(out_channels)
+        self.conv2 = nn.Conv1d(out_channels, out_channels, kernel_size, padding=pad, dilation=dilation)
+        self.bn2 = nn.BatchNorm1d(out_channels)
+        self.dropout = nn.Dropout(dropout)
+        self.downsample = nn.Conv1d(in_channels, out_channels, 1) if in_channels != out_channels else None
+
+    def forward(self, x):
+        # Causal: chop the right-side padding after each conv so position t
+        # only sees inputs at position <= t.
+        out = self.bn1(self.conv1(x))[..., :-self.pad]
+        out = self.dropout(torch.relu(out))
+        out = self.bn2(self.conv2(out))[..., :-self.pad]
+        out = self.dropout(torch.relu(out))
+        residual = x if self.downsample is None else self.downsample(x)
+        return torch.relu(out + residual)
+
+
+class TCN(nn.Module):
+    """Temporal Convolutional Network baseline (Bai, Kolter & Koltun, 2018)."""
+    def __init__(self, input_size=1, num_classes=5, channels=(32, 32, 64, 64),
+                 kernel_size=7, dropout=0.2):
+        super().__init__()
+        layers = []
+        in_ch = input_size
+        for i, out_ch in enumerate(channels):
+            layers.append(TCNBlock(in_ch, out_ch, kernel_size=kernel_size,
+                                    dilation=2 ** i, dropout=dropout))
+            in_ch = out_ch
+        self.tcn = nn.Sequential(*layers)
+        self.classifier = nn.Sequential(
+            nn.AdaptiveAvgPool1d(1),
+            nn.Flatten(),
+            nn.Dropout(dropout),
+            nn.Linear(in_ch, in_ch // 2),
+            nn.ReLU(),
+            nn.Dropout(dropout * 0.5),
+            nn.Linear(in_ch // 2, num_classes),
+        )
+
+    def forward(self, x):
+        x = x.transpose(1, 2)  # (B, T, 1) → (B, 1, T)
+        x = self.tcn(x)
+        return self.classifier(x)
+
+
+# ─── ECG-Transformer baseline ───
+
+class SinusoidalPositionalEncoding(nn.Module):
+    def __init__(self, d_model, max_len=256):
+        super().__init__()
+        pe = torch.zeros(max_len, d_model)
+        position = torch.arange(0, max_len, dtype=torch.float32).unsqueeze(1)
+        div_term = torch.exp(torch.arange(0, d_model, 2).float() * (-math.log(10000.0) / d_model))
+        pe[:, 0::2] = torch.sin(position * div_term)
+        pe[:, 1::2] = torch.cos(position * div_term)
+        self.register_buffer("pe", pe.unsqueeze(0), persistent=False)
+
+    def forward(self, x):
+        return x + self.pe[:, :x.size(1)]
+
+
+class ECGTransformer(nn.Module):
+    """
+    CNN + TransformerEncoder baseline — implements the `TransformerECG`
+    anticipated by train_modern_baseline()'s docstring below. CNN frontend
+    is identical to LSTMBaseline's for a fair architecture-only comparison.
+    """
+    def __init__(self, input_size=1, d_model=96, nhead=4, num_layers=3,
+                 dim_feedforward=192, dropout=0.25, num_classes=5, cnn_out_channels=64):
+        super().__init__()
+        self.cnn = nn.Sequential(
+            nn.Conv1d(input_size, 32, kernel_size=5, padding=2),
+            nn.BatchNorm1d(32),
+            nn.ReLU(),
+            nn.MaxPool1d(2),
+            nn.Conv1d(32, cnn_out_channels, kernel_size=3, padding=1),
+            nn.BatchNorm1d(cnn_out_channels),
+            nn.ReLU(),
+            nn.MaxPool1d(2),
+            nn.Dropout(dropout * 0.5),
+        )
+        self.input_proj = nn.Linear(cnn_out_channels, d_model)
+        self.pos_enc = SinusoidalPositionalEncoding(d_model, max_len=256)
+        encoder_layer = nn.TransformerEncoderLayer(
+            d_model=d_model, nhead=nhead, dim_feedforward=dim_feedforward,
+            dropout=dropout, batch_first=True,
+        )
+        self.transformer = nn.TransformerEncoder(encoder_layer, num_layers=num_layers)
+
+        self.attention = nn.Sequential(
+            nn.Linear(d_model, d_model // 2),
+            nn.Tanh(),
+            nn.Linear(d_model // 2, 1),
+        )
+        self.layer_norm = nn.LayerNorm(d_model)
+        self.dropout = nn.Dropout(dropout)
+        self.classifier = nn.Sequential(
+            nn.Linear(d_model, d_model // 2),
+            nn.ReLU(),
+            nn.Dropout(dropout),
+            nn.Linear(d_model // 2, num_classes),
+        )
+
+    def forward(self, x):
+        x = x.transpose(1, 2)
+        x = self.cnn(x)
+        x = x.transpose(1, 2)
+        x = self.input_proj(x)
+        x = self.pos_enc(x)
+        h_seq = self.transformer(x)
+
+        scores = self.attention(h_seq)
+        weights = torch.softmax(scores, dim=1)
+        h_pooled = (h_seq * weights).sum(dim=1)
+
+        h_pooled = self.layer_norm(h_pooled)
+        h_pooled = self.dropout(h_pooled)
+        return self.classifier(h_pooled)
+
+
 
 
 def train_modern_baseline(name, model, train, val, test, device,
                            class_weights=None, epochs=45):
     """
-    Training loop dùng chung cho ResNet1D và TransformerECG.
+    Training loop dùng chung cho ResNet1D, InceptionTime, TCN, ECGTransformer.
     Giống với train_lstm_baseline về config: Adam lr=1e-3, patience=4,
     weighted CE, gradient clipping 0.5.
     """
@@ -615,8 +822,58 @@ def main():
     print(f"  Test F1_macro: {all_results['resnet1d']['f1_macro']:.4f}, "
           f"AUC: {all_results['resnet1d']['auc_ovr']:.4f}")
 
-    # ── HMR-BiLSTM Test Evaluation ──
-    print("\n[HMR-BiLSTM Evaluation]")
+    print("\n[InceptionTime]")
+    torch.manual_seed(42)
+    inception_model = InceptionTime(
+        input_size=train_data[0].shape[-1],
+        num_classes=NUM_CLASSES,
+        n_filters=24,
+        depth=6,
+        dropout=0.25,
+    )
+    all_results["inceptiontime"] = train_modern_baseline(
+        "InceptionTime", inception_model, train_data, val_data, test_data,
+        device=device, class_weights=cw, epochs=45,
+    )
+    print(f"  Test F1_macro: {all_results['inceptiontime']['f1_macro']:.4f}, "
+          f"AUC: {all_results['inceptiontime']['auc_ovr']:.4f}")
+
+    print("\n[TCN]")
+    torch.manual_seed(42)
+    tcn_model = TCN(
+        input_size=train_data[0].shape[-1],
+        num_classes=NUM_CLASSES,
+        channels=(32, 32, 64, 64),
+        kernel_size=7,
+        dropout=0.2,
+    )
+    all_results["tcn"] = train_modern_baseline(
+        "TCN", tcn_model, train_data, val_data, test_data,
+        device=device, class_weights=cw, epochs=45,
+    )
+    print(f"  Test F1_macro: {all_results['tcn']['f1_macro']:.4f}, "
+          f"AUC: {all_results['tcn']['auc_ovr']:.4f}")
+
+    print("\n[ECGTransformer]")
+    torch.manual_seed(42)
+    ecg_transformer_model = ECGTransformer(
+        input_size=train_data[0].shape[-1],
+        num_classes=NUM_CLASSES,
+        d_model=96,
+        nhead=4,
+        num_layers=3,
+        dim_feedforward=192,
+        dropout=0.25,
+    )
+    all_results["ecg_transformer"] = train_modern_baseline(
+        "ECGTransformer", ecg_transformer_model, train_data, val_data, test_data,
+        device=device, class_weights=cw, epochs=45,
+    )
+    print(f"  Test F1_macro: {all_results['ecg_transformer']['f1_macro']:.4f}, "
+          f"AUC: {all_results['ecg_transformer']['auc_ovr']:.4f}")
+
+    # ── ResMemECG Test Evaluation ──
+    print("\n[ResMemECG Evaluation]")
     try:
         from report_results import load_hmr_bilstm
         hmr_ckpt = "results/checkpoints/inter_best_rlstm.pt"
@@ -642,12 +899,12 @@ def main():
             hmr_metrics = compute_metrics(y_true, preds, probs)
             all_results["hmr_bilstm"] = hmr_metrics
             
-            print(f"\n[HMR-BiLSTM Per-Class Test Report]")
+            print(f"\n[ResMemECG Per-Class Test Report]")
             print(classification_report(y_true, preds, labels=[0, 1, 2, 3], target_names=["N", "S", "V", "F"], zero_division=0, digits=4))
         else:
-            print("  Warning: HMR-BiLSTM checkpoint not found at results/checkpoints/inter_best_rlstm.pt")
+            print("  Warning: ResMemECG checkpoint not found at results/checkpoints/inter_best_rlstm.pt")
     except Exception as e:
-        print(f"  Warning: failed to evaluate HMR-BiLSTM: {e}")
+        print(f"  Warning: failed to evaluate ResMemECG: {e}")
 
     Path("results/logs").mkdir(parents=True, exist_ok=True)
 
@@ -656,18 +913,22 @@ def main():
         json.dump(all_results, f, indent=2)
 
     print("\n" + "=" * 80)
-    print(" BASELINE & HMR-BiLSTM MACRO COMPARISON (AAMI 4-Class: N, S, V, F) ")
+    print(" BASELINE & ResMemECG MACRO COMPARISON (AAMI 4-Class: N, S, V, F) ")
     print("=" * 80)
     print(f"{'Model':<25} {'Acc':>8} {'Prec':>8} {'Rec':>8} {'F1':>8} {'F1_w':>8} {'AUC':>8}")
     print("-" * 80)
-    order = ["logistic_regression", "decision_tree", "lstm", "bilstm", "resnet1d", "hmr_bilstm"]
+    order = ["logistic_regression", "decision_tree", "lstm", "bilstm", "resnet1d",
+              "inceptiontime", "tcn", "ecg_transformer", "hmr_bilstm"]
     pretty = {
         "logistic_regression": "Logistic Regression",
         "decision_tree": "Decision Tree",
         "lstm": "LSTM",
         "bilstm": "BiLSTM",
         "resnet1d": "ResNet1D",
-        "hmr_bilstm": "HMR-BiLSTM",
+        "inceptiontime": "InceptionTime",
+        "tcn": "TCN",
+        "ecg_transformer": "ECG-Transformer",
+        "hmr_bilstm": "ResMemECG",
     }
     for name in order:
         if name not in all_results:
@@ -683,7 +944,7 @@ def main():
     print("=" * 80)
 
     print("\n" + "=" * 94)
-    print(" BASELINE & HMR-BiLSTM PER-CLASS PERFORMANCE (4-Class F1 & Recall) ")
+    print(" BASELINE & ResMemECG PER-CLASS PERFORMANCE (4-Class F1 & Recall) ")
     print("=" * 94)
     print(f"{'Model':<25} {'F1-N':>7} {'F1-S':>7} {'F1-V':>7} {'F1-F':>7} | {'Rec-N':>7} {'Rec-S':>7} {'Rec-V':>7} {'Rec-F':>7}")
     print("-" * 94)

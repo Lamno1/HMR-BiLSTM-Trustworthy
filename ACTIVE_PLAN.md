@@ -3,7 +3,12 @@
 What we are doing RIGHT NOW and why. One active plan at a time.
 See RESEARCH_STATE.md for context, EXPERIMENT_LOG.md for history.
 
-Last updated: **2026-09-05** — **SUPERSEDED. Experimental phase CLOSED.**
+Last updated: **2026-09-09** — **SUPERSEDED. Production phase.**
+
+C1 controlled MIT-only subject-grouped CV was subsequently authorised and has
+completed 10/10 runs with a PASS integrity audit. The manuscript-production task
+is to distinguish primary C1 SG-CV from legacy mixed-source RG-CV; no additional
+experiment is active. See `docs/CONTROLLED_MIT_SUBJECT_CV_PROTOCOL.md`.
 
 E1, E2, E5-A, E5-B, and the P2-final expansion are all complete. Final verdict
 is in `RESEARCH_STATE.md` and `EXPERIMENT_LOG.md`. P2-final is NO-GO (0/3

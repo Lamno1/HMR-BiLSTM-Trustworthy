@@ -1,4 +1,12 @@
-# LOPO / grouped-K-fold evaluation protocol (LOCKED 2026-08-29)
+# Legacy mixed-source record-grouped evaluation protocol (locked 2026-08-29)
+
+> **Terminology/provenance notice (2026-09-09).** This protocol is RG-CV, not
+> traditional leave-one-patient-out and not guaranteed subject-disjoint. MIT-BIH
+> records 201/202 cross its folds, and no INCART subject map was available. It is
+> retained unchanged for the historical R2, forensic, and P2 comparisons. The
+> primary controlled MIT-only subject-grouped experiment is documented in
+> `docs/CONTROLLED_MIT_SUBJECT_CV_PROTOCOL.md`. Do not transfer results between
+> these protocols or relabel legacy artifacts as subject-grouped.
 
 Primary evaluation for the rare classes F and S. Locked before any HMR-MultiPath
 module is built, so results across rungs are comparable. Do not change without a
@@ -7,8 +15,10 @@ recorded reason here.
 ## Why
 
 Fixed DS1/DS2: test-F is 93% patient 213, test-S is 75% patient 232 → F1-F/F1-S
-are single-patient point estimates with irreducible seed variance. Record-level
-CV turns them into a distribution over held-out patients with error bars.
+are patient-composition-fragile point estimates. Record-level CV turns them into
+a distribution over held-out records. Because record identity is not equivalent
+to subject identity here, it does not by itself establish a distribution over
+unseen patients.
 
 ## Pool
 
@@ -29,7 +39,8 @@ CV turns them into a distribution over held-out patients with error bars.
   in different folds; every fold gets big + small + INCART F/S records.
 - Fold F-beat counts (fold-seed 0): 399 / 388 / 82 / 72 / 42.
   Fold S-beat counts: 388 / 391 / 576 / 860 / 2490.
-  Heterogeneous by construction — the 5 fold values ARE the patient distribution.
+  Heterogeneous by construction — the five values are a held-out-record
+  distribution, not an i.i.d. patient sample.
 
 ## Per-fold pipeline
 
@@ -81,6 +92,7 @@ selection is meaningfully slower than a DS1/DS2 run.
 
 ## What still gets a DS1/DS2 run
 
-The final kept architecture is also run on the official DS1/DS2 split, 3 seeds,
-mean ± std, for literature comparability. LOPO is the primary F/S claim; DS1/DS2
-is the comparison table.
+The final kept architecture was planned for the official DS1/DS2 split, 3 seeds,
+mean ± std, for literature comparability. That D1 run was not completed. After
+the 2026-09-09 audit, controlled SG-CV is the primary generalisation check and
+this RG-CV run is retained for the R2/P2 diagnostic comparison.

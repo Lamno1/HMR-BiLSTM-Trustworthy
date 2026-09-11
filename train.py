@@ -1,5 +1,5 @@
 """
-Huấn luyện HMR-BiLSTM trên MIT-BIH ECG.
+Huấn luyện ResMemECG trên MIT-BIH ECG.
 
 Cách chạy:
     python train.py
@@ -241,7 +241,7 @@ def main():
             print(f"  Class weights: {class_weights.cpu().numpy()}")
 
     # ── Model ──
-    print("\n[Building HMR-BiLSTM]")
+    print("\n[Building ResMemECG]")
     model = RLSTMClassifier(
         input_size=input_size,
         hidden_size=cfg["hidden_size"],

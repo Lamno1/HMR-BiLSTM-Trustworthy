@@ -3,75 +3,108 @@
 \usepackage{amsmath}
 \usepackage{booktabs}
 \usepackage{hyperref}
+\hypersetup{hypertexnames=false}
 \usepackage{float}
 \usepackage{placeins}
 \usepackage{amssymb}
 \usepackage{microtype}
+\usepackage{tikz}
+\usetikzlibrary{arrows.meta,positioning,fit,backgrounds,calc,shapes.geometric,shapes.misc}
 \AtBeginDocument{\raggedbottom}
 \setlength{\parindent}{1em}
 \setlength{\parskip}{2pt plus 1pt minus 1pt}
 
 \begin{document}
 
-\title[Rethinking Rare-Class ECG Evaluation]{Rethinking Rare-Class Evaluation for Inter-Patient ECG Arrhythmia Classification}
-\author{\fnm{Van Thong} \sur{NGUYEN} [0009-0007-9360-9112]}\email{nguyenthong111206@gmail.com}
+\title[ResMemECG for Inter-Patient ECG Classification]{ResMemECG: A Residual-Memory Recurrent Model for Inter-Patient ECG Arrhythmia Classification with Subject-Grouped Rare-Class Evaluation}
+\author{\fnm{Van Thong} \sur{NGUYEN} [0009-0007-9360-9112]}\email{thongnguyen.31241027212@st.ueh.edu.vn}
+\author{\fnm{Dai Phong} \sur{LUU NGUYEN} [0009-0000-1758-3319]}
 \author{\fnm{Khoi Nguyen} \sur{TRAN} [0009-0004-3486-1607]}
+\author{\fnm{Dang Tho} \sur{LE} [0009-0008-6323-5778]}
+\author{\fnm{Thien Khoi} \sur{NGUYEN} [0009-0002-0036-523X]}
+\author*{\fnm{Manh Tuan} \sur{NGUYEN} [0000-0002-7158-6550]}\email{tuannm@ueh.edu.vn}
 \affil*{\orgname{University of Economics Ho Chi Minh City (UEH)}, \city{Ho Chi Minh City}, \country{Vietnam}}
 
 \abstract{
-Rare-class performance in inter-patient ECG classification is highly sensitive
-to patient composition. Conventional patient-disjoint evaluation can still
-produce fragile point estimates when a rare-class test set is dominated by one
-or two records. We study this problem with a record-grouped leave-patients-out
-protocol for AAMI heartbeat classification, comparing a flat recurrent
-classifier with a configuration that adds morphology and rhythm-related inputs.
-The evaluation exposes substantial fold-level heterogeneity for fusion and
-supraventricular beats that is hidden by a single conventional split. Forensic
-analyses separate ranking, calibration, subtype composition, patient-relative
-geometry, and decision-policy effects. The enhanced configuration improves
-supraventricular/PAC ranking, but a pre-registered risk-controlled selective
-policy yields a NO-GO result: it does not achieve a useful operating point
-across reliable folds. Fusion
-errors are consistent with label ambiguity or missing context in this dataset,
-single-beat setting, available leads, and tested pipelines; accordingly, fusion
-beats are framed as a referral class rather than a successfully automated class.
-The main contribution is therefore an evaluation methodology and an honest
-account of rare-class failure, not a claim that a new architecture addresses the
-rare-class problem.
+We present ResMemECG, a recurrent architecture for AAMI heartbeat
+classification that augments a bidirectional recurrent trunk with Residual
+Memory Control (RMC), a hybrid standard/residual memory path, and temporal
+attention pooling. On the
+conventional patient-disjoint MIT-BIH DS1/DS2 evaluation, ResMemECG reaches
+accuracy $0.931$, macro F1 $0.628$, and macro AUC $0.953$, exceeding the
+classical, convolutional, recurrent, and attention-based baselines evaluated in
+the same study, although that comparison does not isolate architectural effects
+because the training recipes are not fully matched. We then ask a stricter question: whether its rare-class behaviour
+persists across unseen subjects. In a controlled MIT-BIH-only five-fold
+subject-grouped cross-validation, the same flat model family yields fold-first
+mean F1 scores of $0.011$ for fusion (F) and $0.232$ for supraventricular (S)
+beats, with F1-S ranging from $0.039$ to $0.696$ across folds. These values are
+reported as cross-protocol sensitivity, not as a causal effect of the split. On
+a separate, weaker mixed-source record-grouped protocol, an exploratory
+ResMemECG-MP extension (R2) that adds available V1 morphology and beat-relative
+rhythm features through residual class-specific heads produces a modest and
+seed-consistent improvement in S/PAC ranking, but does not solve the rare-class
+problem, and a pre-specified risk-controlled selective policy on the same
+protocol receives a NO-GO result. F is retained as a referral class in this
+dataset, single-beat setting, available leads, and tested inter-patient
+pipelines. The
+study therefore contributes both the ResMemECG model and a subject-grouped
+evaluation of where its apparent gains do and do not generalise.
 }
-\keywords{ECG arrhythmia classification, rare classes, inter-patient evaluation,
-leave-patients-out validation, patient heterogeneity, selective prediction,
-fusion beats, supraventricular beats}
+\keywords{ResMemECG, ECG arrhythmia classification, residual memory control,
+inter-patient evaluation, subject-grouped cross-validation, rare classes,
+selective prediction}
 \maketitle
 
 \section{Introduction}
-Heartbeat classification results depend not only on the model but also on the
-unit used to construct the train and test partitions. Random beat-level splits
-can leak patient-specific morphology, while even a fixed patient-disjoint split
-can yield a fragile rare-class estimate when its test support is concentrated in
-a small number of records. This distinction is especially important for the
-AAMI supraventricular (S) and ventricular--normal fusion (F) classes.
+Automatic ECG classification must combine local waveform morphology with
+temporal memory while learning from a severely imbalanced class distribution.
+We developed ResMemECG for this setting. Its Residual Memory Control (RMC) cell
+learns an interaction-aware correction to the conventional LSTM update, while a
+hybrid path retains the standard update as a stable fallback and attention
+pooling selects the informative part of each beat. The original objective was
+to improve inter-patient five-class AAMI classification without discarding the
+sequential inductive bias of a bidirectional recurrent network.
 
-This paper re-examines rare-class ECG evaluation using the inter-patient
-DS1/DS2 protocol of de Chazal et al.~\cite{RN21} together with a record-grouped
-leave-patients-out evaluation. The purpose is not to present F or S as solved,
-but to determine which apparent gains persist across held-out patient groups
-and which disappear under patient heterogeneity.
+The conventional DS1/DS2 experiment establishes the model-level result, but it
+also exposes a second problem. The two rare classes---supraventricular (S) and
+ventricular--normal fusion (F)---are supplied predominantly by a few patients.
+Consequently, a patient-disjoint split can still yield a patient-composition-
+fragile rare-class score. We therefore evaluate ResMemECG twice: first under
+the established DS1/DS2 protocol, then under controlled MIT-BIH-only five-fold
+subject-grouped cross-validation (SG-CV), which reveals how the result changes
+across unseen subject groups. A separate mixed-source record-grouped analysis
+is retained for the R2 and selective-prediction diagnostics. These evaluations
+define the scope of ResMemECG; they are not a replacement research project.
 
 The contributions are:
 \begin{enumerate}
-  \item a record-grouped leave-patients-out protocol that exposes the
-  patient-composition sensitivity hidden by a single conventional split;
-  \item a controlled fold- and seed-level comparison of a flat recurrent
-  baseline and the R2 configuration, without attributing the observed change to
-  an untested individual component;
-  \item a forensic analysis of S/PAC subtype composition and F errors using
-  ranking, calibration, record composition, and patient-relative geometry; and
-  \item a pre-registered selective-decision evaluation whose negative result is
-  retained as evidence, leading to an operational referral framing for F.
+  \item ResMemECG, comprising an interaction-aware RMC cell, a learnable hybrid
+  memory path, and attention pooling for single-beat ECG classification;
+  \item a conventional patient-disjoint comparison with classical and deep
+  baselines, followed by controlled MIT-BIH-only subject-grouped cross-validation
+  of the same flat model family;
+  \item a diagnostic extension, ResMemECG-MP (R2), that adds available V1 and
+  rhythm-related inputs through residual class-specific heads; it is evaluated
+  only on a legacy mixed-source record-grouped protocol and is reported as an
+  exploratory sub-study, not as a validated method; and
+  \item a scoped rare-class analysis showing that improved S/PAC ranking does
+  not by itself establish reliable automatic decisions for unseen subjects, and
+  that fusion beats are best routed to expert review in every tested setting.
 \end{enumerate}
 
 \section{Related Work}
+\subsection{Recurrent memory models for ECG classification}
+Convolutional networks capture local waveform structure, while LSTM and BiLSTM
+models represent temporal dependencies across the beat. Attention mechanisms
+can subsequently weight diagnostically informative time steps
+\cite{RN8,RN16}. Prior work has explored the broader LSTM design space
+\cite{RN10,RN11}, but standard ECG pipelines generally retain the conventional
+cell update. ResMemECG instead places an interaction-aware residual correction
+inside the recurrent memory update and blends it with the standard path. This
+memory mechanism, rather than the later selective policy, is the architectural
+subject of the paper.
+
 \subsection{Inter-patient ECG evaluation and the DS1/DS2 protocol}
 The MIT-BIH Arrhythmia Database~\cite{RN20} remains a common benchmark for
 heartbeat classification. De Chazal et al.~\cite{RN21} established a widely
@@ -84,7 +117,10 @@ provide most test examples. Our work focuses on that remaining evaluation gap.
 
 \subsection{Transformer and edge-oriented ECG classifiers}
 Recent CNN--Transformer and lightweight wearable-oriented models continue to
-extend ECG classification~\cite{ref31,ref32}. Their evaluation protocols range
+extend ECG classification~\cite{ref31,ref32,li2025modwpt,xu2026cardiolike}.
+CardioLike-Net is particularly relevant as a recent BSPC inter-patient and
+edge-oriented comparator, although its task construction and hardware objective
+differ from ours. Their evaluation protocols range
 from patient-disjoint to intra-patient or stratified settings, so their headline
 scores are not directly interchangeable. We therefore compare evaluation
 designs explicitly rather than treating heterogeneous published scores as a
@@ -95,22 +131,195 @@ Class imbalance~\cite{RN5}, patient-specific morphology, and uncertainty
 estimation~\cite{RN19} complicate rare-class decisions. Calibration and
 selective prediction can separate ranking ability from operational acceptance,
 but their validity depends on the calibration unit and on distributional
-stability. We evaluate realised fold- and patient-level behaviour rather than
-assuming that a beat-level nominal target transfers to unseen patients.
+stability. A recent BSPC benchmark compared 11 uncertainty methods for Holter
+AF detection and likewise evaluated reject inference rather than confidence in
+isolation~\cite{rahman2026uq}. Recent explainable ECG studies combine
+spatio-temporal models with post-hoc attribution, while a 2026 BSPC systematic
+review documents the continuing lack of standardised, clinician-validated ECG
+explanation benchmarks~\cite{abousaber2025explainable,taleban2026xai}. These
+works motivate comparison with our attention and gate inspection, but do not
+make an attention map a clinically validated explanation. We evaluate realised
+fold-, subject-, and record-level behaviour rather than assuming that a
+beat-level nominal target transfers to unseen subjects.
 
-\section{Record-Grouped Leave-Patients-Out Protocol}
+\section{ResMemECG Methodology}
+Figure~\ref{fig:architecture} summarises the model and its decision workflow.
+Panel~(a) traces one MLII beat through the exact flat ResMemECG implementation
+used for the principal DS1/DS2 result and controlled subject-grouped study.
+Panel~(b) expands one recurrent step of the Residual Memory Control (RMC) cell.
+The later R2 diagnostic extension and selective policy are described separately
+because neither defines the primary ResMemECG forward path.
+
+\begin{figure}[htbp]
+\centering
+\resizebox{\textwidth}{!}{%
+\begin{tikzpicture}[
+  font=\small,
+  >={Stealth[length=2.4mm]},
+  node distance=7mm and 12mm,
+  io/.style   ={draw,align=center,inner sep=4pt,minimum height=11mm,minimum width=17mm,fill=black!6},
+  enc/.style  ={draw,rounded corners=2pt,align=center,inner sep=4pt,minimum height=11mm,fill=blue!6},
+  head/.style ={draw,rounded corners=2pt,align=center,inner sep=4pt,minimum height=11mm,fill=teal!12},
+  spec/.style ={draw,rounded corners=2pt,align=center,inner sep=4pt,minimum height=11mm,fill=violet!10},
+  logit/.style={draw,rounded corners=2pt,align=center,inner sep=4pt,minimum height=11mm,fill=black!3},
+  dec/.style  ={draw,diamond,aspect=1.9,align=center,inner sep=1pt,fill=orange!14},
+  term/.style ={draw,rounded corners=2pt,align=center,inner sep=4pt,minimum height=11mm,fill=green!14},
+  add/.style  ={draw,circle,inner sep=0pt,minimum size=5.5mm,fill=orange!22,font=\footnotesize},
+  fl/.style   ={->,thick},
+  feed/.style ={->,thick,dashed,gray!55!black},
+]
+% ---- exact flat ResMemECG forward path ----
+\node[io] (mlii) {MLII beat\\$187{\times}1$};
+\node[enc,right=of mlii] (cnn) {Two Conv1D blocks\\BN--ReLU--MaxPool\\$187{\times}1\to46{\times}64$};
+\node[enc,right=of cnn] (rnn) {Two-layer BiRMC\\forward + backward\\$46{\times}192$};
+\node[head,right=of rnn] (attn) {Temporal attention\\weighted pooling\\192-d};
+\node[head,right=of attn] (norm) {LayerNorm\\$+$ dropout};
+\node[logit,right=of norm] (head) {MLP classifier\\$192\to96\to5$};
+\node[term,right=of head] (out) {Softmax\\N / S / V / F / Q};
+\draw[fl] (mlii)--(cnn);
+\draw[fl] (cnn)--(rnn);
+\draw[fl] (rnn)--(attn);
+\draw[fl] (attn)--(norm);
+\draw[fl] (norm)--(head);
+\draw[fl] (head)--(out);
+\end{tikzpicture}}
+
+\vspace{1.5mm}
+{\small (a) End-to-end forward path of the flat ResMemECG classifier.}
+
+\vspace{4mm}
+
+\resizebox{0.92\textwidth}{!}{%
+\begin{tikzpicture}[
+  font=\small,
+  >={Stealth[length=2.4mm]},
+  node distance=9mm and 13mm,
+  st/.style ={draw,align=center,inner sep=3pt,minimum height=9mm,minimum width=13mm,fill=black!5},
+  op/.style ={draw,rounded corners=2pt,align=center,inner sep=4pt,minimum height=9mm,fill=blue!6},
+  blend/.style={draw,circle,inner sep=1pt,minimum size=7mm,fill=orange!22},
+  fl/.style ={->,thick},
+]
+\node[st] (cprev) {$c_{t-1}$};
+\node[st,below=12mm of cprev] (hprev) {$h_{t-1}$};
+\node[st,below=12mm of hprev] (xt) {$x_t$};
+\node[op,right=of cprev] (mt) {interaction\\$m_t=(W_c c_{t-1})\odot(W_h h_{t-1})$};
+\node[op,right=of mt] (rt) {residual gate\\$r_t=\sigma\!\big(\mathrm{LN}(W_c c_{t-1}+W_h h_{t-1}+m_t)\big)$};
+\node[op,below=10mm of rt] (rmc) {LSTM gates $i_t,f_t,g_t$ + $r_t$\\keep/add $\to$ LN $\to$ softmax blend\\$\to c_t^{\mathrm{rmc}}$};
+\node[op,below=12mm of rmc] (lstm) {same $i_t,f_t,g_t$ gates\\$c_t^{\mathrm{lstm}}=f_t c_{t-1}+i_tg_t$};
+\node[blend,right=24mm of rmc] (bl) {$\beta_t$};
+\node[st,right=30mm of bl] (ct) {$c_t$};
+
+\draw[fl] (cprev)-- (mt);
+\draw[fl] (hprev)-| (mt);
+\draw[fl] (xt.east) to[out=0,in=180] (lstm.west);
+\draw[fl] (hprev.east) to[out=0,in=170] (lstm.west);
+\draw[fl] (mt)--(rt);
+\draw[fl] (rt)--(rmc);
+\draw[fl] (cprev.south) to[out=-90,in=175] (rmc.west);
+\draw[fl] (cprev.west) to[out=180,in=163] (lstm.west);
+\draw[fl] (rmc)-- node[above,font=\scriptsize]{$c_t^{\mathrm{rmc}}$} (bl);
+\draw[fl] (lstm) -| node[near start,below,font=\scriptsize]{$c_t^{\mathrm{lstm}}$} (bl);
+\draw[fl] (bl)-- (ct);
+\node[font=\footnotesize,align=center,below=9mm of lstm] (note)
+  {hybrid blend $c_t=\beta_t\,c_t^{\mathrm{rmc}}+(1-\beta_t)\,c_t^{\mathrm{lstm}}$, \;
+   $\beta_t=\sigma(W_\beta h_{t-1})$ with blend-bias initialised to $-5$ (training starts as a standard LSTM);\\
+   temporal-smoothness penalty $\dfrac{\lambda}{T-1}\sum_{t}\lVert r_t-r_{t-1}\rVert_2^2$ with $\lambda=0.003$};
+\end{tikzpicture}}
+
+\vspace{1.5mm}
+{\small (b) One recurrent step of the Residual Memory Control cell.}
+
+\caption{ResMemECG architecture and recurrent memory workflow. (a) The exact
+flat classifier used for the principal model evaluation: two convolutional
+blocks feed a two-layer bidirectional RMC trunk, temporal attention pooling,
+normalisation, dropout, and a five-class MLP head. (b) The RMC cell adds an
+interaction-aware residual gate $r_t$ and
+blends a residual memory update $c_t^{\mathrm{rmc}}$ with the standard LSTM
+update $c_t^{\mathrm{lstm}}$ through a learned gate $\beta_t$.}
+\label{fig:architecture}
+\end{figure}
+
+\subsection{Problem formulation and training objective}
+Given an ECG beat $X=(x_1,\ldots,x_T)$, ResMemECG learns a mapping to the five
+AAMI classes N, S, V, F, and Q. Each single-lead segment has $T=187$ samples.
+Training uses class-weighted focal loss,
+\begin{equation}
+\mathcal{L}_{\mathrm{task}}=-\frac{1}{N}\sum_i\sum_k w_k
+\mathbf{1}[y_i=k](1-p_{i,k})^{\gamma}\log p_{i,k},\qquad \gamma=1.5,
+\end{equation}
+with weights computed from the training partition only. This objective is one
+component of the fixed ResMemECG recipe; the later subject-grouped comparison
+holds the whole recipe constant and does not isolate the contribution of this
+term.
+
+\subsection{CNN, recurrent trunk, and attention pooling}
+Two Conv1D--batch-normalisation--ReLU--max-pooling blocks extract local
+morphology and reduce the temporal length from 187 to 46 while expanding the
+representation to 64 channels. A two-layer bidirectional recurrent trunk then
+produces a 192-dimensional sequence representation. Attention pooling learns
+weights over recurrent time steps before a layer-normalised, dropout-regularised
+classifier produces the five logits. The complete model contains approximately
+505,000 trainable parameters.
+
+\subsection{Residual Memory Control}
+A standard LSTM forms its cell update from a retained-memory term and a proposed
+update. ResMemECG adds an interaction-aware residual gate
+\begin{equation}
+r_t=\sigma\!\left(\operatorname{LN}(W_c c_{t-1}+W_h h_{t-1}+m_t)\right),
+\qquad m_t=(W_c c_{t-1})\odot(W_h h_{t-1}).
+\end{equation}
+The gate modulates a keep stream derived from the previous cell state and an add
+stream derived from the candidate update. After layer normalisation, learned
+softmax weights combine the two streams. This is a learned residual correction,
+not an exact algebraic decomposition of the standard LSTM update.
+
+\subsection{Hybrid memory path}
+To retain the stable behaviour of a conventional LSTM, the RMC update runs in
+parallel with the standard cell update:
+\begin{equation}
+\beta_t=\sigma(W_\beta h_{t-1}),\qquad
+c_t=\beta_t\odot c_t^{\mathrm{rmc}}+(1-\beta_t)\odot c_t^{\mathrm{lstm}}.
+\end{equation}
+The blend bias is initialised to $-5$, so the network begins close to a standard
+LSTM and can increase its use of the RMC path during optimisation. A temporal
+smoothness term discourages abrupt changes in $r_t$,
+\begin{equation}
+\mathcal{L}=\mathcal{L}_{\mathrm{task}}+
+\frac{\lambda}{T-1}\sum_{t=2}^{T}\lVert r_t-r_{t-1}\rVert_2^2,
+\qquad \lambda=0.003.
+\end{equation}
+The single-seed ablation evidence for the interaction and smoothness terms is
+direction-mixed; they are therefore described as design components rather than
+independently proven sources of improvement.
+
+\subsection{ResMemECG-MP diagnostic extension (R2)}
+ResMemECG-MP is a diagnostic add-on, not part of the primary ResMemECG forward
+path of Fig.~\ref{fig:architecture}; ``R2'' denotes the second rung of the
+screening ladder that produced it. It is evaluated only on the legacy
+mixed-source record-grouped protocol
+(Section~\ref{sec:rgcv}). It preserves the ResMemECG morphology trunk and shared
+five-class head. A lightweight encoder of the available V1 signal produces an
+additive correction to the F logit, while an MLP over beat-relative RR features
+produces an additive correction to the S logit. Both residual heads are
+zero-initialised. Because that study does not contain a matched V1-only
+ablation, the observed S/PAC change is attributed to the extension as a whole,
+not specifically to its rhythm branch.
+
+\section{Experimental Protocol}
 \subsection{Datasets and AAMI label mapping}
 MIT-BIH Arrhythmia Database records form the primary evaluation source. Beats
 are centred on the annotated R peak and mapped to the five AAMI groups N, S, V,
 F, and Q. The principal morphology input is the MLII lead when it is available;
 the R2 configuration additionally uses the available V1-channel signal. INCART
-records provide supporting patient and morphology diversity, with lead II as
+records enter only the legacy mixed-source protocol of Section~\ref{sec:rgcv},
+where they provide supporting record and morphology diversity, with lead II as
 the principal morphology channel and the available V1 lead for the auxiliary
 path. Because INCART and MIT-BIH differ in acquisition and population, all
 results are stratified by source. MIT-BIH alone determines the primary
 conclusions and the selective-prediction GO/NO-GO decision; INCART is supporting
-evidence only.
+evidence only and is absent from the controlled subject-grouped study.
 
+The INCART preprocessing below therefore applies only to the legacy protocol.
 Preprocessing preserves record identity through every stage. INCART signals
 undergo source-specific baseline filtering, R-peak recentering, polarity
 correction, and a morphology-quality filter before entering the combined pool.
@@ -118,6 +327,7 @@ No globally normalised waveform is stored. Normalisation is fitted afresh
 inside each outer fold as described below, preventing information from an outer
 test record from entering its training transformation.
 \subsection{Conventional DS1/DS2 reference evaluation}
+\label{sec:ds2ref}
 For literature continuity, we retain the patient-disjoint DS1/DS2 partition
 introduced by de Chazal et al.~\cite{RN21}. DS1 supplies model development data
 and DS2 is held out for evaluation. Although this protocol prevents the same
@@ -127,16 +337,59 @@ beats come from patient 232. Consequently, its F and S scores are sensitive to
 the behaviour of those particular records. We use DS1/DS2 as a conventional
 reference rather than treating its single rare-class estimate as a patient
 distribution.
-\subsection{Outer folds, inner validation, and conformal calibration}
-The primary protocol is five-fold grouped cross-validation with the ECG record
-as the statistical and splitting unit. No record contributes beats to more than
-one partition within a fold. Records are ordered by their F and S beat counts
-and assigned by a snake-draft procedure, first distributing F-bearing records,
-then S-only records, and finally the remaining records. This deliberately
-places the large rare-class record clusters in different outer folds rather
-than allowing one fold to absorb all of them. The resulting fold values are
-therefore reported individually as the empirical distribution over held-out
-patient groups.
+
+\begin{figure}[htbp]
+\centering
+\includegraphics[width=0.62\textwidth]{images/ds2_rare_class_concentration.png}
+\caption{Rare-class concentration in the conventional MIT-BIH DS2 test set.
+Most F and S test beats are supplied by one subject in each class, so a single
+aggregate rare-class score is highly sensitive to subject composition.}
+\label{fig:ds2-concentration}
+\end{figure}
+\subsection{Controlled MIT-BIH subject-grouped cross-validation}
+\label{sec:sgcv}
+The primary generalisation check is MIT-BIH-only five-fold subject-grouped
+cross-validation (SG-CV). After excluding the paced records used neither by the
+conventional benchmark nor by this analysis, 44 records form 43 subject groups;
+records 201 and 202, which belong to one subject, are bound to the same group.
+Each outer fold holds out eight or nine complete subject groups, and the
+model-train, inner-validation, and outer-test groups are disjoint. This is not
+traditional leave-one-patient-out evaluation because an outer fold contains
+multiple subjects.
+
+Subject groups are ordered by their F and S beat counts and allocated by a
+snake-draft procedure. This preserves the subject as the indivisible unit while
+distributing the largest rare-class clusters across folds. Exact balance is not
+possible without splitting subjects: outer-fold F support is
+376/367/19/17/23 beats and S support is 210/547/521/1,463/39. We therefore
+report every fold and first average the two training seeds within each fold;
+beats are never treated as independent replications.
+
+The controlled run uses the flat two-layer ResMemECG classifier, MIT-BIH only,
+seeds 42 and 123, a 45-epoch maximum with patience 15, the same cosine schedule,
+focal objective and FGSM training recipe, and exactly 37,208 model-training N
+beats in every fold. Waveform normalisation is fitted on model-train data only.
+The best epoch is selected solely by inner-validation macro-F1 over N/S/V/F;
+the outer test fold is not used to select an epoch, threshold, temperature, or
+model parameter.
+
+\subsection{Mixed-source record-grouped diagnostic protocol}
+\label{sec:rgcv}
+The R2, forensic, and selective-prediction analyses predated SG-CV and use a
+separate five-fold record-grouped protocol (RG-CV). Its pool contains 44
+MIT-BIH and 36 INCART records, uses the ECG record as the splitting unit, a
+25-epoch schedule, and a 35,000-beat model-training N cap. Records are ordered
+by F and S count and assigned by snake draft. MIT-BIH and INCART test metrics
+are always source-stratified, and MIT-BIH alone determines the selective
+GO/NO-GO decision.
+
+RG-CV is record-disjoint but is not guaranteed subject-disjoint. In particular,
+MIT-BIH records 201 and 202 occur in different RG-CV folds, and the pipeline
+does not have an INCART subject-identity map. We consequently retain RG-CV only
+as the matched flat--R2 and selective diagnostic experiment and do not present
+it as leave-one-patient-out or as the primary controlled generalisation result.
+
+\subsection{Inner validation and conformal calibration in RG-CV}
 
 Each outer iteration contains three mutually record-disjoint development
 partitions. The \emph{model-train} records fit the network parameters. The
@@ -159,42 +412,146 @@ outputs. Tail-epoch stochastic weight averaging was also evaluated, with batch
 normalisation statistics recomputed on model-train data, but it did not improve
 R2 and is not used for the primary comparison.
 
-Before committing GPU resources to all outer folds, candidate configurations
+Before committing GPU resources to all RG-CV outer folds, candidate configurations
 were screened on one fixed sentinel split containing difficult, high-support F
-and S records from both databases. A candidate advanced to full two-seed LOPO
+and S records from both databases. A candidate advanced to full two-seed RG-CV
 evaluation only if it improved a sentinel rare class without reducing N or V
 relative to the preceding retained configuration. The sentinel was a screening
 device only; all paper conclusions use the complete outer-fold evaluation.
 \subsection{Statistical units and reporting}
 Outer-fold values, not pooled beats, are the primary generalisation summaries.
-The two training seeds for a given fold are paired repetitions on the same held-
-out records and are not treated as independent patients. We report both seed
-values, their within-fold mean and spread, and all five fold means. R2--flat
-comparisons are paired by fold and seed. Patient-level uncertainty uses the
-record as the resampling cluster, keeping all beats from a selected record
-together; an independent-beat bootstrap is not used as primary uncertainty
-evidence. Source-stratified MIT-BIH and INCART results remain separate throughout.
+In SG-CV, the subject group is the splitting unit. In legacy RG-CV analyses,
+the record is the splitting and resampling unit because subject identity is not
+available consistently. The two training seeds for a fold are paired repetitions
+on the same held-out groups and are not independent observations. We report both
+seed values, their within-fold mean and spread, and all five fold means. R2--flat
+comparisons are paired by RG-CV fold and seed. Record-cluster uncertainty keeps
+all beats from a selected record together; independent-beat bootstrap is not
+used as primary uncertainty evidence. MIT-BIH and INCART remain separate. With
+five folds and two non-independent seeds per protocol, we do not compute
+population-level significance tests; all fold-level comparisons in this paper
+are descriptive, and directional statements (for example ``every fold'' or
+``four of five folds'') refer to the observed folds only.
 
 \section{Main Results}
-\subsection{Patient-composition sensitivity of rare-class estimates}
-% Artifacts: results/logs/baseline_results.json; results/lopo_cv/summary_flat.json.
-For the same flat RLSTMClassifier model family, the conventional DS1/DS2
-reference run obtained F1-F $=0.241$, whereas its MIT-BIH best-epoch fold mean
-under record-grouped LOPO was $0.053$. We describe this as an observed
-cross-protocol gap, not as a controlled estimate of the causal effect of the
-split. The LOPO pipeline additionally introduced INCART records into the
-development pool, used a shorter training schedule, and capped the number of N
-training beats. These differences can also affect optimisation and learned
-representations. What the comparison establishes directly is that the
-conventional rare-class point estimate did not describe performance across the
-held-out patient groups encountered by the matched LOPO model family.
+\subsection{ResMemECG under the conventional DS1/DS2 protocol}
+On the 49,669-beat DS2 test set, ResMemECG achieved accuracy $0.931$, macro
+F1 $0.628$, weighted F1 $0.933$, and macro AUC $0.953$
+(Table~\ref{tab:performance}). It exceeded every baseline trained in the study
+on these aggregate metrics; the strongest comparator macro F1 was $0.452$ from the
+TCN. This is the primary model result under the conventional protocol. It does
+not establish uniform rare-class generalisation, which is assessed separately
+by the controlled subject-grouped cross-validation in the following subsections.
 
-The concentration documented in Section~3 explains why the discrepancy matters:
-although DS1 and DS2 are record-disjoint, their F test estimate is dominated by
-one patient. LOPO distributes the dominant rare-class records across outer folds
-and exposes the resulting variability rather than compressing it into one test
-number.
-\subsection{Per-fold rare-class performance}
+\begin{table}[htbp]
+\caption{Performance on the conventional MIT-BIH DS2 inter-patient test set.
+The table reports the runs recorded by the original ResMemECG evaluation.}
+\label{tab:performance}
+\centering
+\begin{tabular}{@{}lcccc@{}}
+\toprule
+Method & Accuracy & Macro F1 & Weighted F1 & Macro AUC \\
+\midrule
+Logistic regression & 0.568 & 0.320 & 0.672 & 0.716 \\
+Decision tree & 0.805 & 0.376 & 0.831 & 0.621 \\
+LSTM & 0.832 & 0.434 & 0.856 & 0.863 \\
+BiLSTM & 0.851 & 0.433 & 0.864 & 0.833 \\
+ResNet1D & 0.869 & 0.437 & 0.884 & 0.831 \\
+InceptionTime~\cite{ref27} & 0.849 & 0.431 & 0.865 & 0.915 \\
+TCN & 0.837 & 0.452 & 0.864 & 0.919 \\
+ECG-Transformer & 0.790 & 0.405 & 0.829 & 0.810 \\
+\textbf{ResMemECG} & \textbf{0.931} & \textbf{0.628} & \textbf{0.933} & \textbf{0.953} \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+The comparison supports ResMemECG as the strongest evaluated model under this
+fixed DS1/DS2 setting, but it should not be read as a component-level causal
+ablation. ResMemECG also uses its documented focal-loss, cosine-schedule, and
+adversarial-training recipe, whereas several baselines use simpler optimisation
+recipes. The later matched flat--R2 RG-CV comparison holds the training and
+evaluation recipe fixed and answers a narrower question about the R2 extension.
+
+\subsection{Architectural ablation}
+The original single-seed ablation provides diagnostic, rather than
+significance-tested, evidence for the main ResMemECG blocks
+(Table~\ref{tab:resmemecg-ablation}). The ablation reference run (macro F1
+$0.596$) is an earlier single-seed configuration and sits below the $0.628$
+headline model of Table~\ref{tab:performance}; only the within-table differences,
+not the absolute level, should be read from it. Removing the CNN frontend or
+attention pooling caused the largest macro-F1 losses. Disabling the RMC path
+reduced macro F1 from $0.596$ to $0.547$, while forcing the model to use the RMC
+path without its standard-LSTM fallback reduced it to $0.479$. This pattern is
+consistent with the hybrid design: the residual path contributes to the
+decision, but the conventional path remains important for stable optimisation.
+Because these are single-seed runs, the table does not establish the
+independent causal contribution of any gate or regulariser, and the RMC
+component is therefore described as a design choice rather than a
+significance-tested source of improvement.
+
+\begin{table}[htbp]
+\caption{Selected ResMemECG ablations on DS2. Each variant is a single seed;
+the values are diagnostic and are not treated as independent replications.}
+\label{tab:resmemecg-ablation}
+\centering
+\begin{tabular}{@{}lccc@{}}
+\toprule
+Variant & Macro F1 & F1-S & F1-F \\
+\midrule
+ResMemECG (ablation reference) & 0.596 & 0.267 & 0.296 \\
+No RMC path & 0.547 & 0.202 & 0.177 \\
+No CNN frontend & 0.469 & 0.173 & 0.086 \\
+Mean pooling & 0.485 & 0.118 & 0.081 \\
+No hybrid fallback & 0.479 & 0.180 & 0.086 \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+\subsection{Subject-composition sensitivity under controlled SG-CV}
+% Artifacts: results/logs/baseline_results.json;
+% results/controlled_mit_subject_cv/integrity_report.json.
+The conventional DS1/DS2 ResMemECG reference obtained F1-F $=0.241$ and F1-S
+$=0.434$. Under controlled MIT-BIH-only SG-CV, the fold-first, two-seed means
+were F1-F $=0.0109$ and F1-S $=0.232$. Table~\ref{tab:sgcv-folds} reports the
+five folds rather than pooling their beats. F1-S spans $0.039$--$0.696$, while
+F1-F remains between zero and $0.022$ in every fold.
+
+\begin{table}[htbp]
+\caption{Controlled MIT-BIH-only SG-CV results. Values first average seeds 42
+and 123 within each outer fold. Support is the number of true test beats; no
+beat-pooled summary is used.}
+\label{tab:sgcv-folds}
+\centering
+\begin{tabular}{@{}crrrrrr@{}}
+\toprule
+Fold & S support & F support & F1-S & F1-F & AUC-S & AUC-F \\
+\midrule
+0 & 210   & 376 & 0.099 & 0.020 & 0.375 & 0.390 \\
+1 & 547   & 367 & 0.242 & 0.008 & 0.842 & 0.637 \\
+2 & 521   & 19  & 0.696 & 0.022 & 0.949 & 0.700 \\
+3 & 1,463 & 17  & 0.082 & 0.005 & 0.597 & 0.626 \\
+4 & 39    & 23  & 0.039 & 0.000 & 0.765 & 0.354 \\
+\midrule
+Fold mean (total support) & 2{,}780 & 802 & 0.232 & 0.0109 & 0.705 & 0.541 \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+This is an observed cross-protocol gap, not a controlled causal estimate of the
+effect of patient splitting. SG-CV removes the earlier INCART, schedule, and N-cap
+differences, but DS1/DS2 remains one fixed development/test composition whereas
+SG-CV refits the model on five different development populations. The comparison
+therefore establishes protocol and subject-composition sensitivity; it does not
+decompose how much of the gap is caused by any single design choice. The gap is
+consistent with the DS2 rare-class concentration documented in
+Section~\ref{sec:ds2ref} (Fig.~\ref{fig:ds2-concentration}).
+
+For provenance, the earlier mixed-source RG-CV flat analysis produced MIT-BIH
+fold-mean F1-F $0.053$. That value is retained only as the matched baseline for
+the R2 experiment below. It is not the primary SG-CV estimate and cannot be
+relabelled as subject-disjoint because its folds and development pool differ.
+
+\subsection{Per-fold rare-class performance in mixed-source RG-CV}
 % Artifact: results/p1_gate/report.json.
 Figure~\ref{fig:lopo_pairs} shows every paired seed result and emphasises the
 mean within each outer fold. On MIT-BIH, R2 achieved a five-fold mean F1-F of
@@ -202,7 +559,11 @@ $0.070$, with fold means ranging from $0.000$ to $0.164$. Its mean F1-S was
 $0.377$, with fold means ranging from $0.144$ to $0.507$. Thus neither class is
 well represented by a single aggregate value: F effectively disappears in
 three folds, while S performance changes substantially with the held-out record
-group.
+group. The three F-class summaries in this paper---controlled SG-CV flat
+$0.0109$ (Table~\ref{tab:sgcv-folds}), legacy RG-CV flat $0.053$, and legacy
+RG-CV R2 $0.070$---all describe an F class that is not usably classified under
+any tested protocol; the differences between them are protocol and pool
+differences, not evidence of a working F classifier.
 
 \begin{table}[htbp]
 \caption{MIT-BIH rare-class F1 by outer fold. Values are means over the two
@@ -231,7 +592,7 @@ fold. Open markers show the within-fold mean. Lines connect matched seeds; no
 beats or folds are pooled into a bar.}
 \label{fig:lopo_pairs}
 \end{figure}
-\subsection{Patient-level heterogeneity and uncertainty}
+\subsection{Record-level heterogeneity and uncertainty}
 % Artifacts: results/p1_gate/report.json; results/p2_final/patient_level_metrics.csv;
 % results/p2_final/patient_cluster_uncertainty.json.
 The fold supports themselves are heterogeneous: MIT-BIH F support across the
@@ -242,34 +603,9 @@ primary tables retain all five folds and the two paired seeds. For the selective
 analysis, uncertainty intervals resample whole records after averaging the two
 model-seed measurements within each record. With only about nine MIT-BIH test
 records in a fold, these intervals are necessarily wide and are interpreted
-alongside, rather than instead of, the raw fold and patient values.
+alongside, rather than instead of, the raw fold and record values.
 
-\section{HMR-MultiPath R2 Configuration}
-\subsection{Flat recurrent baseline}
-The flat comparator is the repository's RLSTMClassifier. A compact one-
-dimensional convolutional frontend extracts local morphology, followed by a
-two-layer bidirectional recurrent block built from Residual Memory Control
-(RMC) cells. Attention pooling converts the recurrent sequence to a beat-level
-embedding, and a shared fully connected head produces logits for the five AAMI
-classes. The flat model is deliberately retained as the strongest matched
-baseline: it uses the same outer folds, inner-validation rule, optimisation
-recipe, class handling, evaluation protocol, and metric definitions as R2.
-\subsection{R2 inputs and residual heads}
-R2 preserves the entire flat morphology trunk and shared five-class head. It
-adds two lightweight residual specialists. A small convolutional encoder of the
-available V1-channel signal is concatenated with the shared beat embedding and
-produces an additive correction to the F logit. A rhythm multilayer perceptron
-encodes the stored beat-relative RR features and produces an additive correction
-to the S logit. The final layers of both residual heads are zero-initialised, so
-R2 begins with logits identical to the shared flat head and changes the F or S
-logit only when the auxiliary input supports such a correction.
-
-R2 is used here as a diagnostic configuration rather than presented as a new
-architectural contribution. The full LOPO comparison contrasts the joint
-V1-plus-rhythm R2 configuration with flat; it does not contain a full V1-only
-ablation. Any observed S/PAC change is therefore attributed to the R2
-configuration as a whole, not specifically to its rhythm branch.
-\subsection{R2 versus flat under identical LOPO folds}
+\subsection{R2 extension under identical RG-CV folds}
 % Artifacts: results/p1_gate/report.json; results/forensic/E1_report.json.
 R2 increased MIT-BIH F1-S by $0.145$ on average over the five paired fold means.
 Four of five fold means did not decrease. Its average within-fold S seed spread
@@ -283,10 +619,217 @@ flat S-AUC in every MIT-BIH fold: respectively $0.733$ versus $0.499$, $0.980$
 versus $0.873$, $0.951$ versus $0.795$, $0.950$ versus $0.823$, and $0.816$
 versus $0.485$. We therefore interpret R2 as a modest, real improvement in
 S/PAC ranking. This does not imply that S is solved: the fold variability remains
-large, and Section~7 tests whether the ranking gain supports an operationally
-useful selective decision.
+large, and Section~\ref{sec:selective} tests whether the ranking gain supports
+an operationally useful selective decision.
 
-\section{Forensic Analysis of Fusion and Supraventricular Beats}
+\section{Supporting Reliability Analyses}
+\subsection{Perturbation and noise robustness}
+The original DS1/DS2 evaluation also measured sensitivity to bounded input
+perturbations. At $\varepsilon=0.02$,
+ResMemECG retained macro F1 $0.559$ under FGSM and $0.554$ under PGD-20,
+compared with $0.395/0.390$ for LSTM and $0.375/0.366$ for BiLSTM. Under
+additive Gaussian noise, ResMemECG retained
+the highest macro F1 of these models through $\sigma=0.4$; BiLSTM was slightly
+higher at $\sigma=0.5$ ($0.396$ versus $0.387$).
+
+\begin{table*}[htbp]
+\caption{Supporting adversarial-robustness evaluation on the conventional DS2
+test set. FGSM and PGD-20 use $\varepsilon=0.02$. The completed AutoAttack
+comparison used a separate shared 71-sample stratified subset and a custom
+$L_\infty$ ensemble at $\varepsilon=0.02$ (APGD-CE and Square), so its values
+are not directly interchangeable with the full-test values.}
+\label{tab:adversarial-summary}
+\centering
+\small
+\setlength{\tabcolsep}{3pt}
+\begin{tabular}{@{}lrrrrrr@{}}
+\toprule
+Model & Clean F1 & FGSM F1 & FGSM ASR & PGD-20 F1 & PGD-20 ASR & AutoAttack F1 \\
+\midrule
+LSTM       & 0.434 & 0.395 & 0.047 & 0.390 & 0.055 & 0.248 \\
+BiLSTM     & 0.433 & 0.375 & 0.068 & 0.366 & 0.081 & 0.234 \\
+ResMemECG  & 0.628 & 0.559 & 0.023 & 0.554 & 0.026 & 0.391 \\
+\bottomrule
+\end{tabular}
+\end{table*}
+
+These comparisons are supporting evaluations, not evidence that the memory cell
+alone causes robustness. ResMemECG used adversarial training whereas the
+recurrent baselines were clean-trained, so architecture, training objective, and
+adversarial regularisation are confounded. The completed AutoAttack check used
+the same selected examples for all three models, with one APGD-CE restart and
+50 iterations plus 500 Square queries. This reduced two-attack ensemble is a
+controlled white-box/black-box check, but it is not the full standard four-attack
+suite or a robustness certification. Identical PGD-20 and AutoAttack attack-
+success rates on this subset give no evidence of an additional failure exposed
+by the reduced suite; they do not establish robustness to attacks outside it.
+The full-test FGSM and PGD values come from a separate evaluator that keeps all
+models in evaluation mode and applies a common cross-entropy attack objective,
+with checks that the clean predictions and model weights are unchanged before
+and after each attack. Attack-success rate is conditional on correct clean
+classification rather than the total adversarial error rate.
+
+\begin{figure}[htbp]
+\centering
+\includegraphics[width=0.78\textwidth]{images/robustness_noise_all.png}
+\caption{Macro F1 under additive Gaussian noise on the conventional DS2 test
+set. Robustness is reported as supporting evidence; training recipes differ
+between ResMemECG and the recurrent baselines.}
+\label{fig:noise-robustness}
+\end{figure}
+
+\subsection{Calibration and uncertainty}
+On DS2, temperature scaling reduced ResMemECG's aggregate ECE from $0.0380$ to
+$0.0277$, Brier score from $0.1075$ to $0.1057$, and NLL from $0.2162$ to
+$0.2095$. The aggregate improvement hides the rare-class behaviour: after
+scaling, class-conditional ECE was $0.3362$ for S and $0.4027$ for F, compared
+with $0.0481$ for N and $0.0200$ for V. Maximum calibration error also increased
+from $0.4344$ to $0.6805$. Accordingly, the low aggregate ECE is not used as
+evidence that rare-class probabilities are reliable.
+
+\begin{table}[htbp]
+\caption{Temperature-scaling diagnostics for ResMemECG on DS2. Aggregate
+improvements are shown together with the adverse change in maximum calibration
+error.}
+\label{tab:temperature-scaling}
+\centering
+\begin{tabular}{@{}lrr@{}}
+\toprule
+Metric & Before & After scaling \\
+\midrule
+ECE & 0.0380 & 0.0277 \\
+MCE & 0.4344 & 0.6805 \\
+NLL & 0.2162 & 0.2095 \\
+Brier score & 0.1075 & 0.1057 \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+MC-Dropout (50 stochastic passes) and a three-member deep ensemble both assigned
+their highest mean entropy to F ($0.926$ and $0.946$, respectively). Their
+synthetic-corruption OOD AUROC was only $0.610$ and $0.604$. Entropy increased
+from in-distribution to corrupted samples for both methods, but the overlap was
+too large for reliable OOD separation. These measurements support uncertainty
+as a diagnostic signal, not as a validated referral policy; the later P2
+analysis supplies the pre-specified operational test.
+
+\begin{table*}[htbp]
+\caption{Uncertainty diagnostics on DS2 and 2,000 synthetically corrupted
+samples. OOD examples combine Gaussian noise, baseline wander, random cropping,
+and temporal shifts. Seeds or ensemble members are not treated as independent
+patients.}
+\label{tab:uncertainty}
+\centering
+\begin{tabular}{@{}lrrrrrr@{}}
+\toprule
+Method & Passes/members & ID entropy & OOD entropy & ID confidence & OOD confidence & OOD AUROC \\
+\midrule
+MC-Dropout & 50 & 0.383 & 0.502 & 0.873 & 0.826 & 0.610 \\
+Deep ensemble & 3 & 0.426 & 0.538 & 0.862 & 0.812 & 0.604 \\
+\bottomrule
+\end{tabular}
+\end{table*}
+
+Classwise entropy exposes the same imbalance hidden by aggregate uncertainty.
+For MC-Dropout, mean entropy was $0.379/0.567/0.269/0.926$ for N/S/V/F; for the
+ensemble it was $0.421/0.619/0.323/0.946$. Thus both methods consistently flag F
+as the most uncertain class and S as more uncertain than N or V. This ordering
+is scientifically useful, but the weak corruption AUROC shows that high entropy
+alone does not define a dependable automatic accept/refer rule.
+
+The three independently trained ensemble members also disagreed more strongly
+on incorrect than on correct predictions, although the distributions overlapped
+substantially (Fig.~\ref{fig:ensemble-disagreement}). This supports disagreement
+as an error-diagnostic correlate, but not as a clean error detector or a
+patient-level safety guarantee.
+
+\begin{figure}[htbp]
+\centering
+\includegraphics[width=0.78\textwidth]{images/ensemble_disagreement.png}
+\caption{Distribution of the across-member standard deviation of maximum
+confidence for correct and incorrect DS2 predictions from the three-member deep
+ensemble. Greater disagreement is associated with errors, but the overlap
+precludes interpreting disagreement as a validated decision threshold.}
+\label{fig:ensemble-disagreement}
+\end{figure}
+
+\begin{figure}[htbp]
+\centering
+\includegraphics[width=0.70\textwidth]{images/mc_confidence_calibration.png}
+\caption{Confidence--accuracy relationship obtained from 50 Monte Carlo
+Dropout passes on DS2. Only dropout layers were activated during stochastic
+inference; batch-normalisation statistics remained frozen. The curve describes
+aggregate confidence behaviour and does not establish rare-class calibration or
+a validated referral threshold.}
+\label{fig:mc-dropout-calibration}
+\end{figure}
+
+\begin{figure}[htbp]
+\centering
+\includegraphics[width=0.68\textwidth]{images/reliability_diagram.png}
+\caption{DS2 reliability diagrams for the recurrent baselines and ResMemECG,
+with the number of beats in each confidence bin shown below. The dense
+high-confidence bins make visible why aggregate calibration is dominated by the
+majority class; the diagram is interpreted together with class-conditional
+errors rather than as evidence of reliable F/S probabilities.}
+\label{fig:reliability}
+\end{figure}
+
+\subsection{Attention, gates, SHAP, and Integrated Gradients}
+Attention weights and residual-gate trajectories make the internal temporal
+weights inspectable. In selected correctly classified examples, attention
+concentrated around the R-peak/QRS region, with wider attention support in the S
+and F examples. A dataset-level attribution check, however, placed the most
+important samples near the R peak for all classes and did not reproduce a clean
+class-specific physiological separation. The visualisations are therefore model
+inspection aids rather than clinician-validated explanations.
+
+SHAP and Integrated Gradients (IG) were compared on the same set of up to 30
+correctly classified beats per class. For each method, the ten time indices with
+the largest mean absolute attribution were selected; overlap was measured with
+a tolerance-aware Jaccard index allowing a displacement of two samples.
+Agreement was highest for V ($0.818$), intermediate for N and F ($0.667$ each),
+and lowest for S ($0.429$). The global SHAP ranking was dominated by samples
+89--96 around the aligned R-peak region, with index 91 ranked first. This is
+partial cross-method consistency, not a clinical explanation: the analysis
+excludes misclassified beats and the S agreement is substantially weaker.
+
+\begin{figure}[htbp]
+\centering
+\includegraphics[width=0.78\textwidth]{images/shap_summary_plot.png}
+\caption{Dataset-level mean absolute SHAP attribution over time on the
+conventional DS2 evaluation. Concentration around the aligned R peak is an
+inspection result, not validation of a class-specific clinical rationale.}
+\label{fig:shap-summary}
+\end{figure}
+
+\begin{table}[htbp]
+\caption{SHAP--Integrated Gradients agreement on the same correctly classified
+beats. Values are tolerance-aware Jaccard overlap between the top-10 temporal
+indices ($\pm 2$ samples); each class used 30 beats.}
+\label{tab:shap-ig}
+\centering
+\begin{tabular}{@{}lrr@{}}
+\toprule
+Class & Beats & Top-10 Jaccard \\
+\midrule
+N & 30 & 0.667 \\
+S & 30 & 0.429 \\
+V & 30 & 0.818 \\
+F & 30 & 0.667 \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+\begin{figure}[htbp]
+\centering
+\includegraphics[width=0.72\textwidth]{images/gate_trajectories.png}
+\caption{Mean residual-gate trajectory by class on DS2. The trajectories expose
+model dynamics but do not by themselves establish clinical interpretability.}
+\label{fig:gate-trajectories}
+\end{figure}
+
+\section{Rare-Class Generalisation Analysis}
 \label{sec:forensic}
 \subsection{S/PAC ranking and subtype composition}
 \label{sec:s-forensic}
@@ -297,17 +840,26 @@ the ranking analysis on A therefore leaves all five folds eligible, yet R2's
 MIT-BIH A-only AUC still ranges from $0.664$ to $0.978$, a spread of $0.314$.
 This is wider, not narrower, than the aggregate S-AUC spread. In contrast,
 INCART A-only AUC ranges from $0.923$ to $0.993$, a spread of $0.070$. These
-results reject the registered hypothesis that changing proportions of AAMI-S
+results reject the pre-specified hypothesis that changing proportions of AAMI-S
 subtypes drive the MIT-BIH fold variance. They instead locate the instability
 at the patient/domain level, while showing that PAC ranking can be strong in
 other held-out record groups.
+
+\begin{figure}[htbp]
+\centering
+\includegraphics[width=0.78\textwidth]{images/e5_subtype_a_auc.png}
+\caption{Subtype-A/PAC ranking by outer fold. Restricting MIT-BIH to subtype A
+does not remove the fold variability; INCART is supporting evidence only and is
+not used in the MIT-BIH GO decision.}
+\label{fig:e5-subtype-a}
+\end{figure}
 \subsection{Patient concentration in difficult S folds}
 % Artifacts: results/forensic/E1_report.json; results/forensic/E5_subtype.json.
 Fold 4 illustrates the danger of beat-weighted interpretation. Patient 232
 contributes 1,382 of the fold's 2,490 S beats, or 55.5\%. A strong beat-level
 score or selective operating point in this fold can consequently be driven by
 one presentation. We retain fold 4 in all reported results but excluded it from
-the pre-registered multi-fold GO count. Fold 0 is difficult for a different
+the pre-specified multi-fold GO count. Fold 0 is difficult for a different
 reason: its S support is not similarly concentrated in one record, yet its
 ranking AUC is only $0.733$. The two folds therefore should not be treated as
 instances of a single subtype-mixture failure.
@@ -321,6 +873,16 @@ moderate while precision--recall utility collapses: on fold 2, F AUC is $0.785$
 but average precision is $0.001$ and F1-F is zero. This discrepancy reflects
 the small F prevalence and large false-positive burden and prevents AUC alone
 from being interpreted as usable F separability.
+
+\begin{figure}[htbp]
+\centering
+\includegraphics[width=0.67\textwidth]{images/e1_f_error_rank_regions.png}
+\caption{Distribution of R2 true-F$\rightarrow$N errors over regions of the
+true-F population ranked by $P(F)$. The low-rank concentration contradicts a
+threshold-only account of most F errors. Repeated seed predictions are
+descriptive rather than independent beats.}
+\label{fig:e1-f-rank}
+\end{figure}
 \subsection{Patient-relative F geometry}
 % Artifact: results/forensic/E5_fgeometry.json.
 Patient-relative geometry explains model behaviour more consistently than a
@@ -338,6 +900,16 @@ changed sign between logits and embeddings. We therefore retain the
 patient-relative geometry observation but reject the actionable claim that
 greater geometric isolation identifies patients for whom adaptation would
 recover F performance.
+
+\begin{figure}[htbp]
+\centering
+\includegraphics[width=0.72\textwidth]{images/e5_f_patient_geometry.png}
+\caption{Patient-relative F geometry in the pre-head embedding using cosine
+distance. Among true-F samples nearest their record's N centroid, prediction as
+N dominates; this supports the geometric mechanism but not the rejected
+patient-adaptation claim.}
+\label{fig:e5-f-geometry}
+\end{figure}
 \subsection{What the forensic evidence does not establish}
 % Artifacts: results/forensic/E2_ceiling.md; results/forensic/E2_rule_proxy.json;
 % results/forensic/E5_notes.md.
@@ -353,7 +925,8 @@ context on this data and in the tested single-beat pipelines; it does not prove
 that fusion beats are universally unclassifiable.
 
 \section{Selective Prediction and Referral}
-\subsection{Pre-registered decision policy and operating criterion}
+\label{sec:selective}
+\subsection{Pre-specified decision policy and operating criterion}
 For each fold and seed, a vector of class-specific temperatures is fitted on
 inner-validation logits and then frozen. On the separate conformal-calibration
 records, the S nonconformity score is one minus the calibrated probability of S
@@ -364,7 +937,7 @@ when the set is a singleton and its singleton class is not F; singleton-F and
 all non-singleton or empty sets are referred. F-related quantities are therefore
 referral diagnostics, never the result of searching for an ``optimal F
 threshold.'' Realised S coverage on every outer fold is reported alongside its
-nominal target because patient shift weakens the exchangeability assumption.
+nominal target because held-out-record shift weakens the exchangeability assumption.
 
 The useful-operating-point criterion was fixed before the final continuous
 risk--coverage curves were inspected. For a MIT-BIH fold, we consider the point
@@ -374,7 +947,7 @@ the class-conditional auto-S coverage
 $P(\mathrm{accept}\land\widehat{Y}=S\mid Y=S)$ is at least 0.15 and the auto-S
 precision $P(Y=S\mid\mathrm{accept}\land\widehat{Y}=S)$ is at least 0.90.
 The S selective contribution receives a GO verdict only if at least two folds
-from the pre-registered ranking-reliable set \{1,2,3\} meet all three conditions.
+from the pre-specified ranking-reliable set \{1,2,3\} meet all three conditions.
 Fold 0 is excluded because its S ranking AUC is 0.73
 (Section~\ref{sec:s-forensic}), and fold 4 is excluded
 because 55\% of its S support comes from one patient. These exclusions affect
@@ -384,7 +957,7 @@ the GO count but do not remove either fold from the reported results.
 Figure~\ref{fig:p2-risk-coverage} presents the continuous MIT-BIH curves for
 each fold, model, and seed. The panels are deliberately not pooled: folds that
 share a nominal conformal setting can occupy very different realised risk and
-coverage regions. The horizontal line marks the pre-registered overall-risk
+coverage regions. The horizontal line marks the pre-specified overall-risk
 limit; it is an evaluation threshold, not a clinical guarantee.
 
 \begin{figure}[htbp]
@@ -392,7 +965,7 @@ limit; it is an evaluation threshold, not a clinical guarantee.
 \includegraphics[width=\textwidth]{images/p2_final_risk_coverage.png}
 \caption{Overall selective risk versus automatic-decision coverage on MIT-BIH,
 shown separately for each outer fold, model, and training seed. The dotted line
-is the pre-registered risk limit of 0.02.}
+is the pre-specified risk limit of 0.02.}
 \label{fig:p2-risk-coverage}
 \end{figure}
 \subsection{Per-fold GO/NO-GO assessment}
@@ -444,27 +1017,57 @@ refer F-labelled candidates in this dataset, single-beat setting, available
 leads, and tested inter-patient pipelines. It is not a claim that all possible
 fusion-beat classifiers or decision policies must fail.
 \section{Discussion}
-\subsection{What the evidence rules out within the tested pipelines}
-The negative findings narrow the explanation for rare-class failure. First,
-the extensive architecture search documented in the experiment record---more
-than 25 variants followed by the controlled LOPO comparison---did not turn F or
-S into a consistently reliable inter-patient class. This rules out another
-incremental architecture change as an evidence-based response to the observed
-gap; it does not rule out every architecture that could be developed. Second,
-per-class temperature scaling did not make S selective decisions useful under
-the registered policy, even when classwise calibration error improved. Third,
-the A-only analysis ruled out S subtype composition as the driver of the
-MIT-BIH fold variance. Fourth, the F probability-decile analysis ruled out the
-interpretation that most F errors were high-ranked argmax losses recoverable by
-a threshold adjustment. Finally, the weak and sign-unstable isolation
-correlations did not support patient-adaptive F classification as an actionable
-consequence of the observed geometry.
+\subsection{What ResMemECG achieves, and where it remains limited}
+Under the conventional DS1/DS2 protocol, ResMemECG is the strongest model in
+our evaluated set on accuracy, macro F1, weighted F1, and macro AUC. The RMC and
+hybrid memory design therefore remains the central model contribution of this
+work. The subject-grouped results qualify, rather than erase, that contribution:
+aggregate performance on one fixed split does not imply that every rare class
+generalises uniformly across unseen subject groups.
 
-These exclusions matter because each targets a different point in the pipeline:
-model configuration, calibration, label composition, decision threshold, and
-patient adaptation. Their convergence shifts the result away from a search for
-one more model-level correction and toward the limits exposed by record-grouped
-evaluation.
+The R2 extension supplies the clearest positive rare-class result. It improves
+S/PAC ranking against the matched flat ResMemECG configuration in all five
+MIT-BIH folds, with a positive mean F1-S change and comparable seed spread. At
+the same time, calibration did not convert those ranked scores into a useful
+selective operating point under the registered policy. For F, the probability-
+decile and geometry analyses show that the remaining errors are not merely
+high-ranked examples narrowly losing the argmax. These results define the
+observed boundary of the present model and inputs; they are not presented as a
+catalogue of failed architectures or as a universal limit on future methods.
+
+\begin{table*}[htbp]
+\caption{Evidence ledger for the principal rare-class hypotheses. Rejections
+are scoped to the registered tests and evaluated data, inputs, and pipelines.}
+\label{tab:hypothesis-ledger}
+\centering
+\small
+\begin{tabular}{@{}p{0.20\textwidth}p{0.22\textwidth}p{0.40\textwidth}p{0.10\textwidth}@{}}
+\toprule
+Hypothesis & Test & Decisive evidence & Verdict \\
+\midrule
+Incremental architecture changes solve F/S & Prior variants and paired flat--R2
+evaluation & R2 improves S ranking, but F remains near zero in several held-out
+folds and no selective S operating point qualifies & Rejected as next lever \\
+Per-class temperature is the missing S lever & P2-final calibration and
+registered singleton policy & Classwise ECE can improve while useful auto-S
+coverage remains zero or precision remains below criterion & Rejected \\
+S subtype mixture drives fold variance & E5-A annotation-symbol stratification
+& A supplies 85--99\% of MIT-BIH S in every fold; A-only AUC spread is 0.314 &
+Rejected \\
+Most F errors are recoverable argmax losses & E1 $P(F)$-rank deciles & 48.7\%
+of F$\rightarrow$N errors occur in the bottom three deciles versus 4.5\% in the
+top three & Rejected \\
+F behaviour follows patient-relative N/V geometry & E5-B centroid-distance and
+intermediacy analysis & The nearest-N tertile is classified N in 94--99\% of
+cases across tested representations and distances & Supported mechanism \\
+Patient isolation identifies actionable F adaptation & E5-B record--seed
+correlations & $|\rho|=0.12$--$0.23$, descriptively non-significant and
+sign-unstable across representations & Not supported \\
+Registered selective S policy is useful & P2-final risk/coverage criterion & R2
+and flat each qualify on 0/3 pre-specified ranking-reliable folds & NO-GO \\
+\bottomrule
+\end{tabular}
+\end{table*}
 
 \subsection{Explanations that remain compatible with the evidence}
 The present analyses cannot distinguish among F label ambiguity, missing rhythm
@@ -484,17 +1087,17 @@ conformal singleton rule, learned sequence or rhythm-context models, systematic
 scaling of the number of records, or the R2 configuration under the conventional
 DS1/DS2 protocol. The last comparison would require the deferred D1 experiment.
 These are genuine open questions, not explanations supported by the present
-results. In particular, the P2 NO-GO applies to the pre-registered policy on
+results. In particular, the P2 NO-GO applies to the pre-specified policy on
 these data; it is not a proof that every selective policy must fail.
 
 \subsection{Ranking improvement versus useful automatic decisions}
 The practical result is the separation between ranking and decision utility.
 R2 improved S-AUC over flat in every MIT-BIH fold, including folds in which the
 flat model was near chance. Yet the same scores did not produce a useful
-risk-controlled operating point on any of the three pre-registered reliable
+risk-controlled operating point on any of the three pre-specified reliable
 folds. Better ranking is therefore insufficient evidence that a classifier can
-be trusted to make automatic decisions for unseen patients. Evaluation must
-carry the ranked scores through calibration, acceptance, patient-level
+be trusted to make automatic decisions for held-out records. Evaluation must
+carry the ranked scores through calibration, acceptance, record-level
 heterogeneity, and the intended error constraint before an operational claim is
 made.
 
@@ -505,67 +1108,91 @@ presenting unreliable automatic F decisions as successful automation
 while preserving a clear route to expert review.
 
 \section{Limitations}
-The flat-model comparison between F1-F $0.241$ under DS1/DS2 and $0.053$ under
-LOPO carries design differences beyond the patient partition. The LOPO run
-introduced INCART records into the development pool, used a shorter schedule,
-and capped N examples during training. It demonstrates sensitivity across the
-two evaluated protocols but does not decompose how much of the gap each change
-caused.
+The controlled comparison reduces three major confounds in the earlier analysis:
+SG-CV is MIT-BIH-only, uses the 45-epoch recipe, and fixes model-training N at
+37,208. It nevertheless does not identify a causal effect of the split. The
+DS1/DS2 value is one fixed reference result, whereas SG-CV contains five refitted
+models per seed with different training and test subjects. The observed
+$0.241$-to-$0.0109$ F1-F gap is therefore protocol-sensitivity evidence, not a
+decomposition of how much performance is caused by patient composition alone.
 
-The complete LOPO evaluation contains two training seeds and five outer folds,
-with only about nine MIT-BIH test records per fold. Seeds repeat optimisation on
-the same patients and are not independent statistical units. Record-cluster
-intervals are therefore wide by construction, and the five fold values and
-patient-level results remain essential to interpretation.
+SG-CV contains two training seeds and five outer folds, with eight or nine test
+subject groups per fold. Rare-class support remains intrinsically uneven, most
+visibly for F (376/367/19/17/23 beats). Seeds repeat optimisation on the same
+held-out subjects and are not independent statistical units. Five folds also do
+not provide a precise population-level variance estimate; the individual fold
+values remain essential to interpretation. The mixed-source RG-CV confidence
+intervals are record-cluster intervals and are wide by construction.
+
+The R2 extension and the selective-prediction analysis were only run under the
+legacy mixed-source record-grouped protocol, which is record-disjoint but not
+guaranteed subject-disjoint. They were not repeated under controlled SG-CV. Their
+results (the S/PAC ranking gain and the selective NO-GO) should therefore be read
+as exploratory findings on a weaker protocol, and a confirmatory SG-CV run of
+both is left for future work.
 
 MIT-BIH distributes consensus annotations rather than independent annotator
 labels. No F-specific inter-annotator agreement ceiling was available, so the
 study cannot quantify annotation ambiguity or use the rule proxy as such a
 ceiling. Alternative selective policies, including direct probability-threshold
 acceptance, and learned sequence-context models were not evaluated. The
-selective NO-GO is restricted to the pre-registered temperature-plus-Mondrian
+selective NO-GO is restricted to the pre-specified temperature-plus-Mondrian
 singleton policy on these data.
 
-INCART supplies supporting evidence about PAC rankability and patient diversity
-only; it did not enter the selective GO decision. Finally, conformal calibration
-relies on exchangeability that is stressed by evaluation on unseen patient
+INCART appears only in the separate mixed-source RG-CV development pool and
+supplies supporting evidence about PAC rankability and record diversity. It is
+absent from controlled SG-CV and did not enter the selective GO decision.
+Finally, conformal calibration
+relies on exchangeability that is stressed by evaluation on held-out record
 groups and by the small calibration record count. We consequently report
 realised and nominal coverage separately and do not present the nominal target
-as a guarantee under patient shift.
+as a guarantee under record shift.
 
 \section{Conclusion}
-Rare-class ECG performance is highly sensitive to which patients supply the
-test beats. In the same flat recurrent model family, a conventional DS1/DS2
-point estimate of F1-F $0.241$ became a five-fold mean of $0.053$ under the
-record-grouped LOPO pipeline, subject to the accompanying pool, schedule, and
-sampling confounds. Reporting all held-out folds showed both near-zero F
-performance in most patient groups and substantial S variability that a single
-test score concealed.
+ResMemECG combines convolutional morphology extraction, a bidirectional
+Residual Memory Control trunk, a hybrid standard/residual memory path, and
+temporal attention pooling. Under the conventional MIT-BIH DS1/DS2 protocol it
+achieved the strongest performance among the evaluated classical and deep baselines in this study,
+reaching accuracy $0.931$, macro F1 $0.628$, and macro AUC $0.953$. These are the
+principal model results of the paper.
+
+Controlled MIT-BIH-only subject-grouped cross-validation defines the scope of
+that result. In the same flat recurrent model family, the conventional DS1/DS2
+F1-F point estimate of $0.241$ contrasts with a fold-first SG-CV mean of
+$0.0109$; F1-S ranges from $0.039$ to $0.696$ across subject-grouped folds.
+This is protocol-sensitivity evidence, not a causal estimate of the split effect.
+Reporting every fold revealed near-zero F performance and substantial S
+variability that a single test score concealed.
 
 R2 provided a modest, seed-consistent improvement in S/PAC ranking, but this did
 not translate into a useful selective classifier: neither R2 nor flat met the
-pre-registered S criterion on any of the three ranking-reliable folds. The
+pre-specified S criterion on any of the three ranking-reliable folds. The
 selective contribution is therefore a NO-GO. For F, low-rank errors,
 patient-relative geometry, and the absence of a recoverable calibration effect
 support referral as a scoped design recommendation rather than successful
 automation.
 
-The main contribution is methodological. Record-level splitting, per-fold and
-patient-level reporting, paired controls, and pre-registered operational tests
-expose rare-class conclusions that remain hidden in a conventional aggregate
-score. On these data, honest evaluation changed the scientific conclusion more
-than another model iteration did.
+The contribution is therefore twofold: ResMemECG is an effective inter-patient
+ECG classifier under the conventional benchmark, and its subject-grouped
+evaluation provides an explicit account of where rare-class generalisation
+remains fragile. The latter does not turn this into a different model paper or
+erase the former; it prevents the aggregate ResMemECG result from being
+extended beyond the record groups for which evidence exists.
 
-\section*{Acknowledgement}
-This research is funded by the University of Economics Ho Chi Minh City, Vietnam (UEH).
+\section*{Acknowledgements}
+The authors thank the University of Economics Ho Chi Minh City (UEH) for
+financial support and computing resources.
 \section*{Declarations}
 \textbf{Funding.} This research is funded by the University of Economics Ho Chi Minh City, Vietnam (UEH).
 
 \textbf{Conflict of interest/Competing interests.} The authors declare no conflict of interest.
 
-\textbf{Ethics approval.} Not applicable. This study uses publicly available,
-de-identified ECG databases; no new data were collected from human or animal
-subjects, and no identifiable patient information is used.
+\textbf{Ethics approval.} Not applicable for this study. It uses only publicly
+available, de-identified ECG databases distributed by PhysioNet (MIT-BIH
+Arrhythmia Database and, for the supporting analysis, the St Petersburg INCART
+database), whose original recordings were collected under the ethical approvals
+of the contributing institutions. No new data were collected from human or
+animal subjects and no identifiable patient information is used.
 
 \textbf{Consent to participate.} Not applicable.
 
@@ -574,9 +1201,19 @@ subjects, and no identifiable patient information is used.
 \textbf{Availability of data and materials.} The ECG data used in this study are publicly available from PhysioNet.
 
 \textbf{Code availability.} The implementation code, experimental configurations,
-and evaluation results are available at: \url{https://github.com/Lamno1/HMR-BiLSTM-Trustworthy}
+and evaluation artifacts will be released in a public ResMemECG repository. The
+final repository URL will be supplied before submission.
 
-\textbf{Authors' contributions.} \emph{[To be finalised alongside the author list.]}
+\textbf{Authors' contributions.} Van Thong Nguyen: Conceptualization,
+Methodology, Software, Investigation, Formal analysis, Visualization, Writing--
+original draft. Dai Phong Luu Nguyen: Software, Validation, Data curation,
+Writing--review and editing. Khoi Nguyen Tran: Methodology, Investigation,
+Validation, Writing--review and editing. Dang Tho Le: Data curation, Formal
+analysis, Validation, Writing--review and editing. Thien Khoi Nguyen: Literature
+investigation, Resources, Visualization, Writing--review and editing. Manh Tuan
+Nguyen: Supervision, Project administration, Methodology, Writing--review and
+editing, and corresponding author. All authors reviewed and approved the final
+manuscript.
 
 \setlength{\bibsep}{0pt}
 \bibliography{mau1}

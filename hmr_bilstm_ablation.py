@@ -67,11 +67,11 @@ class AttentionPooling(nn.Module):
 
 
 # =============================================================================
-#  HMR-BiLSTM CELL — với flag use_rmc
+#  ResMemECG CELL — với flag use_rmc
 # =============================================================================
 class RLSTMCell(nn.Module):
     """
-    HMR-BiLSTM cell với 2 ablation flags độc lập:
+    ResMemECG cell với 2 ablation flags độc lập:
 
     use_rmc=True, use_hybrid=True  (default): full Hybrid Memory Path
         c_t = beta * c_rmc + (1-beta) * c_lstm
@@ -211,7 +211,7 @@ class RLSTMCell(nn.Module):
 
 
 # =============================================================================
-#  HMR-BiLSTM LAYER (không đổi interface, chỉ pass use_rmc xuống cell)
+#  ResMemECG LAYER (không đổi interface, chỉ pass use_rmc xuống cell)
 # =============================================================================
 class RLSTMLayer(nn.Module):
     def __init__(self, input_size, hidden_size, dropout=0.1,
@@ -246,7 +246,7 @@ class RLSTMLayer(nn.Module):
 
 
 # =============================================================================
-#  BIDIRECTIONAL HMR-BiLSTM
+#  BIDIRECTIONAL ResMemECG
 # =============================================================================
 class BiRLSTM(nn.Module):
     def __init__(self, input_size, hidden_size,

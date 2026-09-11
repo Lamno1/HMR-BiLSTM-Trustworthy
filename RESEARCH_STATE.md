@@ -3,10 +3,23 @@
 Canonical current research state. Updated after every experiment that changes a
 verdict. Source of raw numbers: `results/`, `docs/RARE_CLASS_PROGRESS.md`.
 
-Last updated: **2026-09-05** — **EXPERIMENTAL PHASE CLOSED.** E1/E2/E5/P2-final
-all done. Next and only step: write the paper (LOPO evaluation-methodology +
-honest negative result + F referral framing). No E3/E4/E6, no alternative
-accept rule, no D1 rerun, no training.
+Last updated: **2026-09-09** — C1 controlled MIT-only subject-grouped CV was
+authorised after the original closure and is now complete. All 10 runs and the
+independent artifact audit passed. Production work only; no additional modeling.
+
+## C1 ADDENDUM (supersedes the old generalisation headline)
+
+- Protocol: MIT-BIH only; 44 records/43 subject groups; records 201+202 bound;
+  five folds; seeds 42/123; official 45-epoch recipe; train-N=37,208 per fold.
+- Fold-first means: F1-F **0.01085**, F1-S **0.2316**, AUC-F **0.5413**, AUC-S
+  **0.7054**. F1-S fold range: **0.039-0.696**.
+- The earlier 0.053 flat result belongs to mixed-source record-grouped CV and
+  remains only the matched baseline for R2/P2. It was not guaranteed subject-
+  disjoint and must not be called LOPO.
+- DS1/DS2 0.241 versus C1 0.0109 is evidence of cross-protocol and subject-
+  composition sensitivity, not a causal estimate of the split effect.
+- Sources: `docs/CONTROLLED_MIT_SUBJECT_CV_PROTOCOL.md` and
+  `results/controlled_mit_subject_cv/{REPORT.md,integrity_report.json}`.
 
 ## FINAL VERDICT (2026-09-05, after E1/E2/E5/P2-final)
 

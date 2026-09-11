@@ -80,7 +80,7 @@ def run_study():
         print(f"Error: Model checkpoint {CHECKPOINT_PATH} not found.")
         return
         
-    print(f"Loading HMR-BiLSTM model from {CHECKPOINT_PATH}...")
+    print(f"Loading ResMemECG model from {CHECKPOINT_PATH}...")
     model, _ = load_hmr_bilstm(CHECKPOINT_PATH, DEVICE)
     model.eval()
     
@@ -205,7 +205,7 @@ def run_study():
     plt.axhline(y=clean_acc, color='blue', linestyle='--', alpha=0.5, label='Clean Accuracy')
     plt.axhline(y=clean_f1, color='green', linestyle='--', alpha=0.5, label='Clean Macro F1')
     
-    plt.title("PGD Attack Convergence Study (HMR-BiLSTM)", fontsize=14, fontweight='bold')
+    plt.title("PGD Attack Convergence Study (ResMemECG)", fontsize=14, fontweight='bold')
     plt.xlabel("PGD Attack Steps (Iterations)", fontsize=12)
     plt.ylabel("Performance Metric Value", fontsize=12)
     plt.grid(True, linestyle='--', alpha=0.6)

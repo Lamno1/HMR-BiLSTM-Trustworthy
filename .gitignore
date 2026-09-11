@@ -1,5 +1,5 @@
 # =============================================
-# HMR-BiLSTM Project .gitignore
+# ResMemECG Project .gitignore
 # =============================================
 
 # ---------- Python ----------
@@ -67,3 +67,72 @@ data/processed/
 
 # ---------- Output Runs ----------
 outputs/
+
+# ---------- Heavy experiment run dumps (checkpoints/logs, not source) ----------
+results/controlled_mit_subject_cv/
+results/controlled_mit_subject_cv_smoke/
+results/controlled_mit_subject_cv_smoke_repro/
+results/crossdb_multiseed/
+results/p0_smoke/
+results/p0_smoke_mp/
+results/p0_smoke2_mp/
+results/p0_smoke3_flat/
+results/p0_smoke3_mp/
+results/p0_smoke2_mp.log
+results/p0_smoke3_flat.log
+results/p0_smoke3_mp.log
+results/p2_final_repro/
+modern_architectures/results/
+modern_architectures/checkpoints/
+modern_architectures/__pycache__/
+
+# ---------- Downloaded reference papers (not project output) ----------
+/*.pdf
+s41060-025-00816-w.pdf
+s41598-025-09424-x.pdf
+1706.03762v7.pdf
+
+# ---------- LaTeX build artifacts ----------
+latex/*.aux
+latex/*.bbl
+latex/*.blg
+latex/*.out
+latex/*.log
+latex/*.fls
+latex/*.fdb_latexmk
+latex/*.synctex.gz
+
+# ---------- LaTeX submission zip bundles / duplicated templates ----------
+latex/bspc.zip
+latex/bspc_overleaf_upload.zip
+latex/bspc/
+latex/els-cas-templates.zip
+latex/elsarticle.zip
+latex/overleaf_upload.zip
+latex/overleaf_upload/
+overleaf_upload.zip
+latex_teacher_review.zip
+
+# ---------- Compiled paper PDFs (rebuild from .tex instead of committing) ----------
+latex/manuscript.pdf
+latex/sn-article.pdf
+latex/sn-article-final.pdf
+latex/sn-article-final.txt
+latex/ResMemECG_advisor.pdf
+latex/ResMemECG_advisor_v2.pdf
+latex/HMR_BiLSTM_Framework_for_ECG_Classification__7_.pdf
+latex/highlights.pdf
+
+# ---------- Personal / certificate files ----------
+NGUYEN.pdf
+"latex/certificate_Van Thong NGUYEN.pdf"
+latex/certificate_tmp.pdf
+latex/certificate_text.txt
+
+# ---------- Scratch / throwaway scripts ----------
+_scratch_*.py
+TEN_EM_LA_GI.py
+
+# ---------- Local agent/tool state (not part of the project) ----------
+.codex/
+graphify-out/

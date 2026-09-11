@@ -1,9 +1,9 @@
 """
 train_rr_prototype.py
 ======================
-Prototype: does adding RR-interval features improve F1(S) for HMR-BiLSTM?
+Prototype: does adding RR-interval features improve F1(S) for ResMemECG?
 
-Trains ONE model (full HMR-BiLSTM + RR side input) on data/processed/splits_rr/
+Trains ONE model (full ResMemECG + RR side input) on data/processed/splits_rr/
 (produced by validation/preprocess_aami_rr.py) using the exact same recipe
 (hyperparameters, class weights, focal loss, adversarial training, cosine LR,
 early stopping) as the "full" variant in run_ablation.py, so the comparison
@@ -194,7 +194,7 @@ def train_one_epoch(model, loader, optimizer, criterion, device, cfg):
 
 
 def main():
-    parser = argparse.ArgumentParser(description="Train HMR-BiLSTM + RR-interval prototype")
+    parser = argparse.ArgumentParser(description="Train ResMemECG + RR-interval prototype")
     parser.add_argument("--data-dir", default=CONFIG["data_dir"],
                         help="Directory with inter_{train,val,test}.npz (X,y,rr). "
                              "Use data/processed/splits_rr_smote for the SMOTE variant.")
@@ -328,7 +328,7 @@ def main():
     clean_test = {k: v for k, v in test_m.items() if not k.startswith("_")}
     result = {
         "variant": "hmr_bilstm_rr",
-        "label": "HMR-BiLSTM + RR-interval (prototype)",
+        "label": "ResMemECG + RR-interval (prototype)",
         "data_dir": cfg["data_dir"],
         "class_weights_dir": args.class_weights_dir if args.class_weights_dir else cfg["data_dir"],
         "n_params": n_params,

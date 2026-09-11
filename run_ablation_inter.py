@@ -1,9 +1,9 @@
 """
 run_ablation_inter.py
 ======================
-Chạy ablation study cho HMR-BiLSTM trên MIT-BIH ECG (Inter-Patient split).
+Chạy ablation study cho ResMemECG trên MIT-BIH ECG (Inter-Patient split).
 Các variant được hỗ trợ:
-    full   - HMR-BiLSTM đầy đủ (có thể load trực tiếp từ results/checkpoints/inter_best_rlstm.pt)
+    full   - ResMemECG đầy đủ (có thể load trực tiếp từ results/checkpoints/inter_best_rlstm.pt)
     no_rmc - bỏ RMC path, c_t = c_lstm (BiLSTM baseline với CNN + Attention)
     no_adv - adversarial_training=False (huấn luyện trên dữ liệu sạch inter-patient)
 
@@ -60,7 +60,7 @@ BASE_CONFIG = {
 VARIANTS = {
     "full": {
         "use_rmc": True, "use_cnn": True, "use_attention": True,
-        "label": "HMR-BiLSTM (full)",
+        "label": "ResMemECG (full)",
     },
     "no_rmc": {
         "use_rmc": False, "use_cnn": True, "use_attention": True,
@@ -388,7 +388,7 @@ def generate_table(results, out_dir):
     print("=" * 110)
 
 def main():
-    parser = argparse.ArgumentParser(description="HMR-BiLSTM Ablation Study on Inter-Patient Split")
+    parser = argparse.ArgumentParser(description="ResMemECG Ablation Study on Inter-Patient Split")
     parser.add_argument(
         "--variants", nargs="*",
         choices=["full", "no_rmc", "no_adv"],
@@ -417,7 +417,7 @@ def main():
     ckpt_dir = out_dir / "checkpoints"
     ckpt_dir.mkdir(parents=True, exist_ok=True)
 
-    # Copy HMR-BiLSTM (full) checkpoint if it exists in the main checkpoints directory
+    # Copy ResMemECG (full) checkpoint if it exists in the main checkpoints directory
     main_full_ckpt = Path("results/checkpoints/inter_best_rlstm.pt")
     dest_full_ckpt = ckpt_dir / "best_rlstm_full.pt"
     if main_full_ckpt.exists() and not dest_full_ckpt.exists():

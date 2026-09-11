@@ -1,10 +1,10 @@
 """
 run_ablation.py
 ===============
-Chạy ablation study cho HMR-BiLSTM trên MIT-BIH ECG.
+Chạy ablation study cho ResMemECG trên MIT-BIH ECG.
 
 Các variant:
-    full            — HMR-BiLSTM đầy đủ (dùng làm reference)
+    full            — ResMemECG đầy đủ (dùng làm reference)
     no_rmc          — bỏ RMC path, c_t = c_lstm  ← QUAN TRỌNG NHẤT
     no_cnn          — bỏ CNN, raw ECG đi thẳng vào BiRLSTM
     mean_pool       — thay AttentionPooling bằng mean pooling
@@ -85,7 +85,7 @@ BASE_CONFIG = {
 VARIANTS = {
     "full": {
         "use_rmc": True, "use_cnn": True, "use_attention": True,
-        "label": "HMR-BiLSTM (full)",
+        "label": "ResMemECG (full)",
     },
     "no_rmc": {
         "use_rmc": False, "use_cnn": True, "use_attention": True,
@@ -475,7 +475,7 @@ def generate_table(results, out_dir):
         f.write("\\midrule\n")
         for i, row in enumerate(rows):
             # Bold dòng full model (index 0 nếu "full" chạy trước)
-            if row["Variant"].startswith("HMR-BiLSTM (full)"):
+            if row["Variant"].startswith("ResMemECG (full)"):
                 line = " & ".join(
                     f"\\textbf{{{row[c]}}}" for c in cols
                 ) + " \\\\\n"
@@ -509,7 +509,7 @@ def generate_table(results, out_dir):
 #  MAIN
 # =============================================================================
 def main():
-    parser = argparse.ArgumentParser(description="HMR-BiLSTM Ablation Study")
+    parser = argparse.ArgumentParser(description="ResMemECG Ablation Study")
     parser.add_argument(
         "--variants", nargs="*",
         choices=["full", "no_rmc", "no_cnn", "mean_pool",

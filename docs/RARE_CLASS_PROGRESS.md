@@ -8,13 +8,37 @@
 
 Last updated: **2026-08-31** (two-layer classifier + selective-decision plan locked; P0 instrumentation in progress, no full LOPO run launched).
 
+### CURRENT STEP 2026-09-09 — controlled MIT-only subject-grouped CV complete
+
+The previously named LOPO analysis was audited and found to be record-grouped,
+not guaranteed patient-disjoint: MIT-BIH records 201/202 (one subject) were in
+different outer folds, and the INCART pool has no subject-ID map. A new isolated
+controlled experiment has therefore completed from
+`validation/run_controlled_mit_subject_cv.py` into
+`results/controlled_mit_subject_cv/` (`C1_MIT_SUBJECT_CV_V1`). It uses MIT-BIH
+only, binds 201/202, forms five folds over 43 subject groups from the 44 retained
+non-paced records, uses the flat two-layer RLSTMClassifier, seeds 42/123, the
+official 45-epoch cosine/FGSM recipe with patience 15, inner-validation macro-F1
+over N/S/V/F, and exactly 37,208 model-training N beats per fold (the official
+DS1 model-train N count). Checkpoints are written after every epoch. Two
+independent two-batch smoke runs produced bit-identical prediction artifacts
+(SHA-256 `18456e48d965a2de6a9195c35cb7a538eacd8933cf4f7143234973cd7834694e`).
+All 10 fold-runs completed successfully. Independent recomputation from the NPZ
+predictions passed with exact stored/recomputed F1 agreement. Fold-first two-seed
+means are F1-F **0.01085**, F1-S **0.2316**, AUC-F **0.5413**, and AUC-S
+**0.7054**. Per-fold F1-S is 0.099/0.242/0.696/0.082/0.039; per-fold F1-F is
+0.020/0.008/0.022/0.005/0.000. This strengthens protocol-sensitivity evidence
+but is not a causal split-effect estimate. See
+`results/controlled_mit_subject_cv/{REPORT.md,integrity_report.json}`. No
+manuscript change is authorised until Research Lead review.
+
 ---
 
 ## 0. TL;DR for a new agent
 
-- Paper: "Trustworthy ECG Classification" (HMR-BiLSTM), inter-patient AAMI 5-class
+- Paper: "Trustworthy ECG Classification" (ResMemECG), inter-patient AAMI 5-class
   (N/S/V/F/Q) on MIT-BIH. Backbone = `hmr_bilstm.py::RLSTMClassifier`
-  (CNN → 2-layer bidirectional HMR-BiLSTM → attention pool → classifier).
+  (CNN → 2-layer bidirectional ResMemECG → attention pool → classifier).
 - N and V are **solid** (F1 ≈ 0.96 / 0.87, tiny seed variance). Done, no work needed.
 - **The whole problem is F and S**: F1-F ≈ 0.24 mean, swings 0.04↔0.45 across seeds;
   F1-S ≈ 0.33 mean, swings 0.19↔0.43. This instability is the blocker.
@@ -341,7 +365,7 @@ inductive bias); they do not address the measured causes. Do NOT build/run
 DSTA-HD or CAMP-HD in parallel.
 
 ```
-MLII ── HMR-BiLSTM trunk ── e_morph ─────────────┐
+MLII ── ResMemECG trunk ── e_morph ─────────────┐
                                                   ├─ shared N/V/Q logits (from e_morph)
 V1 ─── lightweight CNN ───── e_v1 ───────────────┤
                                                   ├─ F-specialist: [e_morph, e_v1] → z_F
@@ -393,7 +417,8 @@ Status: ✅ kept / ❌ rejected / 🔄 running / ⏸ built-not-run
 
 | Date | Experiment | Setup | Result (DS2) | Verdict |
 |---|---|---|---|---|
-| 08-27 | **Multi-seed base audit** | compile all existing HMR vs DSTA-C runs, full recipe | HMR mean macro .584±.064 (N .962±.003, V .863±.010, **S .329±.122, F .182±.126**); DSTA-C mean .601±.032 but same-seed non-reproducible (.636→.573) | ✅ **HMR-BiLSTM is the base, DSTA-C is not** (DSTA can't hold S+F together, CP-decomp flat direction) |
+| 09-09 | **C1 MIT-only subject-grouped CV** | 44 MIT records / 43 subject groups; 201+202 bound; flat 2-layer RLSTM; 5 folds x seeds 42/123; 45-epoch official recipe; train-N=37,208 | fold-first mean **F1-F .0109, F1-S .2316**; S fold range .039-.696; integrity recomputation PASS | ✅ **completed; strengthens patient-composition-fragility finding.** Not a causal split-effect estimate; Research Lead review required before manuscript revision. |
+| 08-27 | **Multi-seed base audit** | compile all existing HMR vs DSTA-C runs, full recipe | HMR mean macro .584±.064 (N .962±.003, V .863±.010, **S .329±.122, F .182±.126**); DSTA-C mean .601±.032 but same-seed non-reproducible (.636→.573) | ✅ **ResMemECG is the base, DSTA-C is not** (DSTA can't hold S+F together, CP-decomp flat direction) |
 | 08-27 | Root-cause diagnostics (CPU, no training) | linear probes on waveforms + official ckpt analysis | AUC_F 0.96 vs F1-F 0.24; 208-N/213-N AUC 1.000; V1 lifts transfer 0.90→0.96; val = 30 F / 3 patients | ✅ reframed problem (§2) |
 | 08-28 | **Cross-DB Stage A, run 1** | MIT-BIH DS1 + INCART pooled, plain arch | DS2 macro .375, V collapsed | ❌ **FAILED** — INCART baseline-wander bug + recipe drift |
 | 08-29 | **Cross-DB Stage A, v2** (fixed) | + 0.5 Hz Butterworth HP on INCART, per-source z-score, DS2 re-extracted (=byte-identical to paper), official recipe imported. 3 seeds. | macro .582±.031 (=off .584); **S .174±.002 — variance killed but mean COLLAPSED .33→.17**; **F .311±.106 — mean up +.13 but spread .259 not reduced**; best_ep still 5/14/5 | ❌ **Pooling rejected.** INCART S = different domain. Val-blindness hypothesis (tier 1b) largely disproven. F-mean lever noted for a later Stage-B oversample. |

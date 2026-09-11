@@ -105,7 +105,7 @@ def main():
     print(f"Device: {device}")
     
     # Load model and loaders
-    print("Loading HMR-BiLSTM model checkpoint...")
+    print("Loading ResMemECG model checkpoint...")
     model, _ = load_hmr_bilstm(RLSTM_CKPT, device)
     
     print("Preparing validation and test loaders...")

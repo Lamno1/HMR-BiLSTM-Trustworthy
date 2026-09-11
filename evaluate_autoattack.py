@@ -155,13 +155,13 @@ def main():
     # Clinical epsilons of interest: 0.02 (training eps), 0.03, 0.05
     epsilons = [0.02, 0.03, 0.05]
     
-    # Canonical HMR-BiLSTM (same checkpoint used by report_results.py / evaluate_fgsm.py /
+    # Canonical ResMemECG (same checkpoint used by report_results.py / evaluate_fgsm.py /
     # evaluate_pgd.py / robustness/cw_attack.py) is the required primary entry so AutoAttack
     # numbers are comparable to the rest of the results tables. The ablation-variant
     # checkpoints are optional extras and are skipped if not yet trained.
     variants = [
         {
-            "name": "HMR-BiLSTM",
+            "name": "ResMemECG",
             "ckpt": RLSTM_CKPT,
             "canonical": True,
         },

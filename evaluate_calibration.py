@@ -164,8 +164,8 @@ def plot_reliability_diagram(models_stats, output_path):
     # Perfect calibration reference line
     ax1.plot([0, 1], [0, 1], 'k--', label="Perfectly Calibrated", linewidth=1.8, zorder=0)
 
-    colors  = {'LSTM': '#1f77b4', 'BiLSTM': '#ff7f0e', 'HMR-BiLSTM': '#2ca02c'}
-    markers = {'LSTM': 'o',       'BiLSTM': 's',        'HMR-BiLSTM': '^'}
+    colors  = {'LSTM': '#1f77b4', 'BiLSTM': '#ff7f0e', 'ResMemECG': '#2ca02c'}
+    markers = {'LSTM': 'o',       'BiLSTM': 's',        'ResMemECG': '^'}
 
     # ── histogram layout ────────────────────────────────────────────────────
     # Spread bars across the full bin width (0.1) divided evenly by # models
@@ -269,7 +269,7 @@ def main():
     models_info = {
         "LSTM": ("results/checkpoints/best_lstm.pt", "baseline"),
         "BiLSTM": ("results/checkpoints/best_bilstm.pt", "baseline"),
-        "HMR-BiLSTM": ("results/checkpoints/inter_best_rlstm.pt", "rlstm"),
+        "ResMemECG": ("results/checkpoints/inter_best_rlstm.pt", "rlstm"),
     }
 
     results = {}
@@ -348,10 +348,10 @@ def main():
         writer = csv.writer(f)
         writer.writerow([
             'Rank', 'Model',
-            'ECE_uncalibrated', 'ECE_calibrated (HMR-BiLSTM only)',
-            'MCE_uncalibrated', 'MCE_calibrated (HMR-BiLSTM only)',
-            'NLL_uncalibrated', 'NLL_calibrated (HMR-BiLSTM only)',
-            'Brier Score', 'Brier Score_calibrated (HMR-BiLSTM only)',
+            'ECE_uncalibrated', 'ECE_calibrated (ResMemECG only)',
+            'MCE_uncalibrated', 'MCE_calibrated (ResMemECG only)',
+            'NLL_uncalibrated', 'NLL_calibrated (ResMemECG only)',
+            'Brier Score', 'Brier Score_calibrated (ResMemECG only)',
             'ECE Interpretation', 'Brier Interpretation'
         ])
         for rank, (model_name, stats) in enumerate(sorted_results, start=1):
@@ -381,7 +381,7 @@ def main():
         ckpt_hash = get_checkpoint_hash(RLSTM_CKPT)
         paths["out_calib"].mkdir(parents=True, exist_ok=True)
 
-        hmr = results.get("HMR-BiLSTM", {})
+        hmr = results.get("ResMemECG", {})
         # Structure must match what evaluate_trustworthiness.py reads:
         # calib_res["metrics"]["ece_before"], ["ece_after"], ["brier_before"], etc.
         calib_json = {

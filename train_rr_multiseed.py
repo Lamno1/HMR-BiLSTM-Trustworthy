@@ -1,7 +1,7 @@
 """
 train_rr_multiseed.py
 =======================
-Multi-seed reliability check for the HMR-BiLSTM + RR-ratio prototype.
+Multi-seed reliability check for the ResMemECG + RR-ratio prototype.
 
 Trains the SAME config as train_rr_prototype.py (data/processed/splits_rr,
 same hyperparameters) across several seeds, then reports mean +/- std for

@@ -1,0 +1,500 @@
+  HMR-BiLSTM: A Robust and Interpretable
+Hybrid Memory Residual BiLSTM Framework for
+        ECG Arrhythmia Classification
+
+            Quoc Hung NGUYEN* [0000-0002-6363-0160],
+          Dai Phong LUU NGUYEN [0009-0000-1758-3319],
+      Khoi Nguyen TRAN [0009-0004-3486-1607], Dang Tho LE
+     [0009-0008-6323-5778], My Phung LE [0009-0008-8566-0409],
+             Van Thong NGUYEN [0009-0007-9360-9112]
+*
+    University of Economics Ho Chi Minh City (UEH), Ho Chi Minh City,
+                                Vietnam.
+
+
+         *Corresponding author(s). E-mail(s): hungngq@ueh.edu.vn;
+
+
+                                        Abstract
+     Automatic ECG arrhythmia classification is now common in cardiac monitoring,
+     but detecting rare and dangerous beat types is still difficult. LSTM-based models
+     are popular yet struggle on several fronts: long-range dependencies across 187-
+     sample heartbeats, class imbalance that reaches 113×, and no built-in way for a
+     clinician to see what the model is doing. We present HMR-BiLSTM, a BiLSTM
+     augmented with a Residual Memory Control (RMC) cell and a Hybrid Mem-
+     ory Path. The RMC cell adds an interaction-aware residual gate on top of the
+     standard LSTM gates and splits memory into keep and add streams weighted
+     by learned softmax attention, while attention pooling weights computed after
+     the recurrent loop provide a signal that can be overlaid on the ECG waveform
+     for inspection. The Hybrid Memory Path runs the RMC cell alongside a con-
+     ventional LSTM through a learnable blend gate, so the model behaves like a
+     standard LSTM early in training and relies on the RMC pathway more as train-
+     ing progresses. On MIT-BIH, the model reaches macro AUC 0.9916, macro
+     Recall 0.9146, and macro F1 0.8825, with recall 4.43 percentage points above
+     CNN-BiLSTM-ATTN and gains concentrated on the Fusion and Supraventricu-
+     lar classes. Under FGSM at ε = 0.02, HMR-BiLSTM holds macro F1 at 0.842
+     versus 0.773 for CNN-BiLSTM-ATTN; under PGD-20 it holds at 0.839 ver-
+     sus 0.756. Across these tests, HMR-BiLSTM holds up better than the recurrent
+     baselines, though we stop short of any deployment claim.
+
+
+                                            1
+     Keywords: ECG arrhythmia classification, Interpretable AI, Robust medical AI,
+     Bidirectional LSTM, Residual Memory Control, Adversarial robustness, AI Safety.
+
+
+
+
+1 Introduction
+Heartbeat classifiers now sit inside everything from hospital Holter monitors to con-
+sumer smartwatches, and most still lean on a plain LSTM. That backbone has three
+soft spots. Its forget gate multiplies element by element, so it never really models how
+the cell state and the hidden state interact. Its gating tends to drift over the 187 sam-
+ples of a beat, which bites hardest when normal beats outnumber the rarest class 113
+to 1. And it says nothing about why a given beat was flagged. We did not treat these
+as cosmetic: a ventricular beat that slips through can delay care, so we judged the
+model not only on accuracy but on whether it holds up under noise, whether a cardi-
+ologist can read its reasoning, and whether it survives small adversarial perturbations,
+a test still rare in ECG work yet hard to dismiss once a model starts informing clinical
+decisions. To tackle all three, we place a Residual Memory Control (RMC) mechanism
+inside a standard BiLSTM cell, giving HMR-BiLSTM; on MIT-BIH under the AAMI
+EC57 protocol it reaches macro AUC 0.9916 against 0.9803 for CNN-BiLSTM-ATTN
+and lifts macro recall from 0.8703 to 0.9146. The paper contributes (i) an RMC cell
+that adds an interaction-aware residual gate, a keep/add memory split, and softmax
+attention over both memory streams to a standard LSTM; (ii) a Hybrid Memory Path
+that blends the RMC cell with an ordinary LSTM through a learnable gate, steadying
+training and raising minority-class recall under the 113:1 imbalance; (iii) attention-
+pooling weights that overlay on the raw trace to give a per-time-step, clinician-facing
+read of each decision; and (iv) a robustness and calibration study under FGSM, PGD,
+and Gaussian noise, where the model keeps a recall-priority margin over recurrent
+baselines on the rare, high-risk classes.
+
+
+2 Related Work
+ECG classification is a multi-class time-series problem made harder by severe class
+imbalance [1]. Earlier work fed hand-extracted features (RR interval, QRS width, P/T-
+wave amplitude) to a Logistic Regression [2] or a Decision Tree [3], which are easy
+to follow but break under noise or population shift, whereas deep models drop that
+step: on MIT-BIH, 1D CNNs [4] and BiLSTMs both do well, with Yildirim [5] hitting
+99.39% accuracy and Hannun et al. [6] matching cardiologists across 91,000 patients.
+Attention [7] and Transformer blocks [8, 9] later sharpened the focus on diagnostically
+relevant segments, but the recurrent core itself was left largely untouched, even as
+Greff et al. [10] mapped the LSTM design space and Zoph and Le [11] found searched
+structures that outperform it, which is where our memory-augmented cell comes in.
+Explaining these models is no longer optional once they reach the clinic: SHAP [12]
+and LIME [13] rank feature importance and attention maps show where the model
+looks [7, 8], but neither reveals how memory shifts across the P-wave, QRS, and T-wave
+
+
+                                             2
+inside the recurrent loop, which is why Rudin [14] argues high-stakes medicine should
+favour models interpretable by design, and clinical-readiness surveys keep returning
+to the same shortlist of reliability, transparency, robustness, and calibration [15, 16].
+That robustness concern is not hypothetical: Han et al. [17] evaded both CNN and
+RNN ECG classifiers with minuscule perturbations, spurring ECG-specific defences
+such as adversarial distillation [18], while Begoli et al. [19] cautioned that a model
+with no sense of its own uncertainty should not be deployed alone. HMR-BiLSTM
+addresses this gap with a lightweight mechanism inside the LSTM cell, paired with
+attention-pooling weights that can be plotted next to the ECG signal for inspection.
+
+
+3 Proposed Methodology
+Scope of Contribution. HMR-BiLSTM keeps the foundational LSTM equations
+intact and adds a specialised memory-routing mechanism, the RMC cell and Hybrid
+Memory Path, targeting two failure modes of conventional LSTMs on long ECG
+sequences: poor minority-class recall under extreme imbalance and the absence of
+intrinsic time-step interpretability. The smoothness constraint and attention pool-
+ing act as stabilisation and temporal-focus layers, while the core novelty is the
+hybrid blending mechanism, which trades a modest parameter increase for better
+minority-class recall and built-in inspectability.
+
+3.1 Problem Formulation
+Given an input ECG segment X = (x1 , . . . , xT ) with xt ∈ Rd , ∀t ∈ {1, 2, . . . , T } with
+T = 187 and d = 1 for single-lead MIT-BIH signals, the goal is to learn a function
+f : RT ×d → ∆K−1 that maps each segment to a probability distribution over K = 5
+heartbeat classes following the AAMI EC57 standard [20] (N, S, V, F, Q). Training
+uses Focal Loss with per-class weights:
+
+                     1 ∑︂ ∑︂
+         Ltask = −           wk · 1[yi = k ] · (1 − pi,k )γ · log pi,k ,   γ = 1.5       (1)
+                     N i
+                             k
+
+
+We compute the modulating term (1 −pi,k )γ from the unweighted cross-entropy before
+applying the per-class weight wk . This ordering differs from the original formulation of
+Lin et al. [21], where α is folded into the focal term directly. Our variant is designed to
+make the focusing mechanism (1 − pi,k )γ reflect the model’s raw prediction difficulty,
+independent of the class prior encoded in wk . In practice the difference is small, but
+we note it for reproducibility. Class weights follow the scikit-learn balanced formula
+and are clipped to [0.5, 10.0].
+
+3.2 HMR-BiLSTM Architecture
+The architecture consists of three stacked blocks. The CNN frontend applies two
+Conv1D–BN–ReLU–MaxPool blocks (kernel sizes 5 and 3, pooling stride 2), reducing
+sequence length from T = 187 to T ′ = 46 while expanding channels from 1 to 64 to
+
+
+                                               3
+capture local waveform patterns before the recurrent block. The HMR-BiLSTM block
+stacks two bidirectional LSTM layers (num layers = 2), the first layer’s hidden out-
+put feeding the second; each cell uses the Residual Memory Control mechanism with a
+Hybrid Memory Path (Sections 3.3–3.4), and the final hidden states are concatenated
+across directions to dimension 2H = 192 before attention pooling. An attention pool-
+ing layer then learns adaptive weights γt over time steps and aggregates the hidden
+states, and a two-layer fully-connected classifier with Layer Normalization and dropout
+produces the class logits. The full model has about 505K trainable parameters.
+
+3.3 Residual Memory Control Cell
+A standard LSTM updates its cell memory as ct = ft ⊙ ct−1 + it ⊙ gt . The forget
+gate is a simple element-wise multiplication and cannot capture nonlinear interactions
+between ct−1 and ht−1 when deciding what to keep. Our HMR cell adds a small
+interaction-aware residual gate:
+
+   rt = σ (LayerNorm(Wc ct−1 + Wh ht−1 + mt )),          mt = (Wc ct−1 ) ⊙ (Wh ht−1 )      (2)
+
+Intuitively, rt provides a per-dimension adjustment to the forget gate’s keep/add bal-
+ance. The memory is then split into a “keep” stream ckeep   t    = (ft + rt ⊙ (1 − ft )) ⊙ ct−1
+and an “add” stream caddt   = (1 − rt ) ⊙ (it ⊙ gt ), which are combined through a learned
+softmax attention. Before computing the softmax scores, both ckeep and cadd are layer-
+normalised to prevent either stream from dominating by scale alone. The two streams
+are then weighted according to their joint content rather than raw memory values.
+
+3.4 Hybrid Memory Path and Temporal Smoothness
+Replacing the standard memory update entirely with RMC carries two risks: slow con-
+vergence early in training, and stream collapse when the softmax attention saturates.
+To avoid both risks, we run the RMC pathway crmc   t   in parallel with the standard
+LSTM pathway cLSTMt     and merge them through a learnable blend gate:
+
+                 βt = σ (Wβ ht−1 ),    ct = βt ⊙ crmc
+                                                  t   + (1 − βt ) ⊙ cLSTM
+                                                                     t                     (3)
+
+The bias of Wβ is initialized to −5, giving βt = σ (−5) ≈ 0.007 at the start of training.
+At initialisation, then, the RMC branch is nearly shut off. The network starts training
+as a conventional LSTM and only ramps up the residual memory channel if and when
+the loss gradients push it to. Because ECG is a continuous signal — not a bag of
+independent tokens — we want rt to change smoothly from one time step to the next.
+We enforce this with a smoothness penalty:
+
+                                          T
+                                     λ ∑︂
+                     L = Ltask +             ∥rt − rt−1 ∥22 ,   λ = 0.003                  (4)
+                                   T − 1 t=2
+
+
+
+
+                                               4
+The smoothness penalty stabilises gate dynamics during training, discouraging abrupt
+changes in rt between adjacent steps so that memory routing evolves gradually across
+the cardiac cycle.
+
+
+4 Experimental Protocol
+We use the MIT-BIH Arrhythmia Database [22] in Fazeli’s preprocessed Kaggle ver-
+sion, with a stratified 85/15 split (74,420 train, 13,134 validation) and a held-out test
+set of 21,892. Each beat is fixed at T = 187 steps and Z-score normalised on training
+statistics. The five AAMI EC57 classes are imbalanced 113×: N (82.77%), S (2.54%),
+V (6.61%), F (0.73%), Q (7.35%). We compare two classical baselines (Logistic Regres-
+sion, Decision Tree), three deep baselines (CNN-LSTM-ATTN, CNN-BiLSTM-ATTN,
+and ResNet1D [1, 14]), and HMR-BiLSTM; all deep models share the same CNN
+frontend and attention pooling, differing only in the recurrent core, within a compa-
+rable 200K–510K parameter range (Transformers are left for future work). All deep
+models use Adam (lr 1 × 10−3 , weight decay 1 × 10−4 ), batch size 128, dropout 0.25,
+hidden size 96, seed 42; HMR-BiLSTM adds cosine annealing, Focal Loss (γ = 1.5),
+and lightweight adversarial training (each step replaces 30% of the batch with FGSM
+examples at ε = 0.02), while the baselines use a fixed learning rate, weighted cross-
+entropy with the same class weights, and clean data only. We assume a white-box
+adversary holding the model weights who can craft bounded L∞ perturbations but
+cannot retrain the model; the tested threat is input perturbation to flip predictions,
+under FGSM/PGD (Section 5.3) and Gaussian noise (Section 5.4), while data poi-
+soning, model extraction, and membership inference are acknowledged but not tested.
+We report Accuracy, macro Precision/Recall/F1, weighted F1, and macro AUC, with
+macro metrics primary, plus ECE and Brier for calibration. We test three hypotheses:
+H1, sequential models beat classical classifiers on temporally structured input; H2,
+HMR-BiLSTM improves over CNN-BiLSTM-ATTN, with the Residual Memory Con-
+trol and blend gate as the source; H3, HMR-BiLSTM detects rare classes better and
+degrades more gracefully under perturbation.
+
+
+5 Results and Discussion
+5.1 Overall Comparison
+As detailed in Table 1, classical methods fall apart on the minority classes (Logistic
+Regression macro F1 0.4787, Decision Tree 0.6846) while every neural model holds
+macro F1 above 0.86 and AUC above 0.98, supporting H1. Among the neural models,
+HMR-BiLSTM takes the top macro recall (0.9146), macro F1 (0.8825), and AUC
+(0.9916), lifting recall by 4.43 pp and macro F1 from 0.8616 to 0.8825 over CNN-
+BiLSTM-ATTN. ResNet1D is a strong CNN baseline, beating both recurrent attention
+models on accuracy and AUC (0.9736, 0.9914), yet HMR-BiLSTM still edges it on
+the two metrics that matter for rare beats (macro F1 by 0.78 pp, macro recall by 0.90
+pp), which need temporal context across the whole heartbeat; precision slips slightly
+(0.8562 vs 0.8610) but buys the higher recall you want in cardiac monitoring, where
+
+
+                                           5
+   Table 1 Performance on MIT-BIH ECG test set (21,892 samples). Column maximums
+   are bolded.
+
+   Method                          Acc       P mac       R mac      F1 mac      F1 w       AUC
+   Logistic Regression            0.6743     0.4408      0.7616     0.4787      0.7243    0.9145
+   Decision Tree                  0.8911     0.5812      0.8135     0.6846      0.8890    0.9197
+   CNN-LSTM-ATTN                  0.9715     0.8665      0.8734     0.8691      0.9565    0.9871
+   CNN-BiLSTM-ATTN                0.9667     0.8610      0.8703     0.8616      0.9701    0.9865
+   ResNet1D                       0.9736     0.8496      0.9056     0.8747      0.9744    0.9914
+   HMR-BiLSTM (Ours)              0.9749     0.8562      0.9146     0.8825      0.9749    0.9916
+
+
+
+
+a missed arrhythmia costs more than a false alarm. Per-class, V, F, and Q reach high
+AUC (0.9972, 0.9971, 0.9995), with F1 0.9492 for V and 0.7944 for F, both above CNN-
+BiLSTM-ATTN; S stays hardest (0.9698 AUC, 0.7387 F1), since supraventricular beats
+resemble normal sinus rhythm without RR-interval context.
+
+5.2 Ablation Study
+We ablate six components of HMR-BiLSTM to isolate their individual contributions.
+Table 2 and Table 3 report two groups of ablations trained under identical hyperpa-
+rameters; each group is compared against its own full-model baseline due to run-to-run
+variation inherent in GPU non-deterministic operations.
+
+     Table 2 Architectural ablation on the MIT-BIH test set. Baseline: full HMR-BiLSTM
+     (F1 = 0.8921).
+
+     Variant                       Params      F1-mac       F1-S      F1-V      F1-F      AUC
+     HMR-BiLSTM (full)             505,038      0.8921     0.7387     0.9492    0.7944    0.9917
+     No-RMC (ct = clstm )          505,038      0.8918     0.7590     0.9505    0.7713    0.9911
+     No-CNN (raw input)            450,062      0.8470     0.6844     0.9329    0.6667    0.9881
+     Mean-Pool (no attention)      486,413      0.8506     0.6427     0.9261    0.7216    0.9865
+     No-Interaction (mt = 0)       505,038      0.8793     0.7011     0.9456    0.7797    0.9922
+
+
+
+
+    Table 3 Training objective and pathway ablation. Baseline: full HMR-BiLSTM (F1 =
+    0.8804, separate training run).
+
+    Variant                         Params      F1-mac       F1-S      F1-V      F1-F      AUC
+    HMR-BiLSTM (full)               505,038      0.8804      0.7179    0.9338    0.8037    0.9885
+    No-Hybrid-Path (ct = crmc )     505,038      0.8606      0.6307    0.9338    0.7720    0.9854
+    No-Smoothness (λ = 0)           505,038      0.8919      0.7424    0.9540    0.7831    0.9921
+    No-Adv-Training                 505,038      0.9023      0.7789    0.9509    0.8025    0.9933
+
+
+
+
+                                                 6
+   The ablation isolates each component in turn. CNN frontend: removing it causes the
+largest single drop in macro F1 (0.8921 → 0.8470, −4.5 pp), with F1-F collapsing by
+12.8 points, since without convolution the recurrent block sees raw input at T = 187
+and cannot recover localised features like QRS shape or P/T peaks; attention pooling:
+swapping it for mean pooling costs 4.2 pp on macro F1 and hits S-beats hardest (−9.6
+pp), as S-beats differ from Normal in a narrow window that averaging dilutes but
+attention can target. RMC pathway: turning off the whole pathway (No-RMC) barely
+moves macro F1 (0.8918 vs 0.8921) yet drops F1-F from 0.7944 to 0.7713; Fusion beats
+are only 0.73% of the data, so the fall vanishes in the macro number but matters
+clinically, as even a few caught Fusion events can flag a mixed-origin arrhythmia, and
+the pathway also carries the model’s internal gate signal. Interaction term: setting
+mt = 0 while keeping the rest of the pathway lowers F1-F by 1.5 points (→ 0.7797)
+and F1-S by 3.8 points (→ 0.7011); tellingly, removing the whole RMC pathway
+leaves S-beat detection untouched whereas removing only mt hurts it, so the element-
+wise product of cell and hidden state seems to encode something used specifically to
+separate Supraventricular beats, though the ablation does not pin down what. Hybrid
+Path: forcing ct = crmc
+                      t   drops macro F1 from 0.8804 to 0.8606 and F1-S from 0.7179
+to 0.6307 (−8.7 pp), because the LSTM backup stabilises minority-class learning early
+on, when the blend gate β ≈ 0.007 keeps the RMC branch nearly shut. Smoothness
+penalty: disabling it (λ = 0) leaves aggregate metrics nearly unchanged (F1 0.8919 vs
+0.8804) but slightly lowers Fusion F1 (0.8037 → 0.7831), stabilising temporal memory
+rather than boosting clean-data accuracy. Adversarial training: removing it raises
+clean macro F1 to 0.9023 but drops FGSM F1 at ε = 0.02 from 0.8425 to 0.8045, the
+largest robustness degradation in the ablation, marking it as a major source of the
+margin in Section 5.3; overall the architecture contributes minority-class recall and
+memory routing while adversarial training contributes robustness, and neither alone
+reproduces the full profile.
+
+5.3 Adversarial Robustness under FGSM and PGD
+We test adversarial robustness with FGSM and PGD-20 (20 iterations, α = 0.005,
+random start, L∞ projection) at budgets ε ∈ {0, 0.01, 0.02, 0.05} on Z-score normalised
+inputs; at ε = 0.02 the perturbation is visually imperceptible. Under FGSM (Fig. 1),
+HMR-BiLSTM holds macro F1 at 0.842 at ε = 0.02 and 0.783 at ε = 0.05, versus
+0.773 and 0.683 for CNN-BiLSTM-ATTN; under PGD-20 the gap is similar (0.839 vs
+0.756, widening to 0.745 vs 0.573). Since HMR-BiLSTM is trained with adversarial
+examples and the baselines are not, this margin reflects the joint effect of the RMC
+architecture and adversarial training, and the No-Adv ablation (Table 3) attributes
+most of it to the training. Clinically, per-class recall matters more than aggregate F1,
+since an attack can selectively erase rare classes: at ε = 0.05 under FGSM (Fig. 2),
+HMR-BiLSTM loses only 0.08 on Fusion (0.846 → 0.766) and 0.06 on S, against 0.27
+and 0.41 on Fusion for CNN-BiLSTM-ATTN and CNN-LSTM-ATTN; under PGD-20
+the Fusion drop is 0.05 versus 0.11 for both baselines, so the advantage concentrates
+on the rare, high-risk classes where HMR-BiLSTM already leads on clean data.
+
+
+
+
+                                           7
+Fig. 1 Macro F1 under FGSM attack as a function of the perturbation radius ε. HMR-BiLSTM
+retains the highest F1 across all ε values.
+
+
+
+
+Fig. 2 Per-class recall under FGSM at ε = 0.05. Solid = clean, hatched = adversarial. The Fusion-
+class recall of CNN-BiLSTM-ATTN and CNN-LSTM-ATTN (−0.27 and −0.41) while HMR-BiLSTM
+degrades by only −0.08.
+
+
+5.4 Noise Robustness
+For noise robustness (Fig. 3), all models hold steady at σ ≤ 0.05. From σ = 0.3 the
+separation becomes clear: HMR-BiLSTM keeps F1 at 0.4798 while CNN-BiLSTM-
+ATTN and CNN-LSTM-ATTN collapse to 0.3451 and 0.3507. At σ = 0.4 the margin
+grows to 0.3620 versus 0.2386 for CNN-BiLSTM-ATTN. A more complex architecture
+normally degrades faster under heavy noise, not slower; HMR-BiLSTM inverts this,
+which may reflect implicit input smoothing by the residual gate, though we do not
+test this directly.
+
+
+
+
+                                               8
+Fig. 3 Macro F1 of all five methods as a function of the additive Gaussian noise standard deviation
+σ. HMR-BiLSTM is the most noise-tolerant model from σ ≥ 0.3.
+
+
+5.5 Calibration
+HMR-BiLSTM has a higher ECE than the baselines (0.0397 vs 0.0056 for CNN-LSTM-
+ATTN and 0.0080 for CNN-BiLSTM-ATTN). Top-label ECE is dominated by the
+majority class on an imbalanced set, so a model confident on the 82% Normal beats
+looks well-calibrated even if its minority-class probabilities are unreliable. Brier score,
+which penalises the full probability vector rather than only the top label, reverses the
+ranking: 0.0444 for HMR-BiLSTM versus 0.0461 and 0.0542. The higher ECE likely
+reflects the combined effect of Focal Loss and adversarial training, which reshape and
+broaden the predictive distribution. Neither metric alone captures calibration on a 5-
+class imbalanced task; classwise ECE would be more informative but is not reported
+here. We do not claim a calibration advantage for HMR-BiLSTM; the evidence is
+mixed.
+
+5.6 Interpretability Analysis
+Figure 4 shows that the residual gate rt averages to about 0.500 across time steps due
+to the LayerNorm–sigmoid architecture and does not vary at the individual-beat level,
+so its contribution is a memory-retention bias analysed in Section 5.2 and the clinician-
+facing interpretability comes primarily from the attention weights γt . Qualitatively, the
+attention distribution shifts with clinical expectations across beat types: for Normal
+beats it peaks before the QRS over the P-wave and early QRS that define normal
+sinus rhythm; for Ventricular beats it moves to the post-QRS T-wave region where
+wide QRS and ST-deviation are most visible; for Fusion beats it concentrates early
+(≈ 60 ms) at the pacemaker spike where intrinsic and paced QRS overlap; and for
+Supraventricular beats it splits into two peaks near the P-wave and QRS, tracking
+the subtle PR-interval differences that separate this class from Normal. In practice, a
+
+
+                                                9
+Fig. 4 Case Study Normal with the raw ECG waveform, estimated P/QRS/T regions and attention
+pooling weights γt on a shared time axis.
+
+
+cardiologist could read this distribution directly off the trace: a Ventricular flag whose
+peak sits on a widened QRS appears consistent with known pathology, whereas a peak
+on a morphologically normal segment is a cue to question the flag. The overlay does
+not replace clinical judgement but guides the reviewer to the relevant region rather
+than the whole waveform; formal validation by clinical experts is reserved for future
+work.
+
+6 Discussion and Conclusion
+On MIT-BIH, HMR-BiLSTM improves macro F1 and recall over CNN-BiLSTM-
+ATTN (by 2.09 and 4.43 pp), concentrated on the clinically significant Supraven-
+tricular and Fusion classes, and stays ahead under adversarial and Gaussian-noise
+perturbation with a lower Brier score, though none of this amounts to a deployment-
+ready claim. Practical and societal impact: the model is best used as a triage aid
+on Holter monitors and wearables, flagging suspicious minority-class beats for human
+review rather than acting autonomously, while its attention overlay shows which part
+of the waveform drove each flag and supports clinician oversight; since such mod-
+els can feed clinical decisions, robustness to adversarial and noisy inputs is a safety
+and information-security property, not a benchmark nicety. Realising this depends on
+responsible deployment: the intra-patient MIT-BIH gains do not establish readiness
+across populations or devices, so prospective validation on diverse patient groups and
+privacy-preserving training (federated learning, differential privacy) remain prerequi-
+sites. Limitations: the intra-patient Kaggle split rather than the inter-patient AAMI
+EC57 protocol [20] may give optimistic estimates, and S/F performance stays below
+the dominant Normal class; stronger adaptive attacks (Carlini–Wagner, AutoAttack)
+and cross-dataset validation on Vietnamese clinical ECG remain for future work.
+
+                                            10
+Acknowledgement
+This research is funded by the University of Economics Ho Chi Minh City, Vietnam
+(UEH).
+
+
+Data Availability
+The ECG datasets used in this study are publicly available from the MIT-BIH
+Arrhythmia Database. The implementation code, experimental configurations, and
+evaluation results are available at: https://github.com/tn1-ai/HMR-BILSTM
+
+
+References
+ [1] Mondéjar-Guerra, V., Novo, J., Rouco, J., Penedo, M.G., Ortega, M.J.B.S.P.,
+     Control: Heartbeat classification fusing temporal and morphological information
+     of ecgs via ensemble of classifiers 47, 41–48 (2019)
+ [2] Hosmer Jr, D.W., Lemeshow, S., Sturdivant, R.X.: Applied Logistic Regression.
+     John Wiley & Sons, ??? (2013)
+ [3] Breiman, L., Friedman, J., Olshen, R.A., Stone, C.J.: Classification and Regres-
+     sion Trees. Chapman and Hall/CRC, ??? (2017)
+ [4] Kiranyaz, S., Ince, T., Gabbouj, M.J.I.t.o.b.e.: Real-time patient-specific ecg
+     classification by 1-d convolutional neural networks 63(3), 664–675 (2015)
+ [5] Yildirim, O.: A novel wavelet sequence based on deep bidirectional lstm network
+     model for ecg signal classification. Computers in biology and medicine 96, 189–202
+     (2018)
+ [6] Hannun, A.Y., Rajpurkar, P., Haghpanahi, M., Tison, G.H., Bourn, C., Turakhia,
+     M.P., Ng, A.Y.J.N.m.: Cardiologist-level arrhythmia detection and classification
+     in ambulatory electrocardiograms using a deep neural network 25(1), 65–69
+     (2019)
+ [7] Bahdanau, D., Cho, K., Bengio, Y.J.a.p.a.: Neural machine translation by jointly
+     learning to align and translate (2014)
+ [8] Vaswani, A., Shazeer, N., Parmar, N., Uszkoreit, J., Jones, L., Gomez, A.N.,
+     Kaiser, L., Polosukhin, I.: Attention is all you need. Advances in neural
+     information processing systems 30 (2017)
+ [9] Alghieth, M.: Deepecg-net: a hybrid transformer-based deep learning model for
+     real-time ecg anomaly detection. Scientific Reports 15, 20714 (2025)
+[10] Greff, K., Srivastava, R.K., Koutnı́k, J., Steunebrink, B.R., Schmidhuber,
+     J.J.I.t.o.n.n., systems, l.: Lstm: A search space odyssey 28(10), 2222–2232 (2016)
+[11] Zoph, B., Le, Q.V.J.a.p.a..: Neural architecture search with reinforcement learn-
+     ing (2016)
+[12] Lundberg, S.M., Lee, S.-I.J.A.i.n.i.p.s.: A unified approach to interpreting model
+     predictions 30 (2017)
+[13] Ribeiro, M.T., Singh, S., Guestrin, C.: ” why should i trust you?” explaining the
+     predictions of any classifier. In: Proceedings of the 22nd ACM SIGKDD Interna-
+     tional Conference on Knowledge Discovery and Data Mining, pp. 1135–1144
+
+
+                                          11
+[14] Rudin, C.J.N.m.i.: Stop explaining black box machine learning models for high
+     stakes decisions and use interpretable models instead 1(5), 206–215 (2019)
+[15] Markus, A.F., Kors, J.A., Rijnbeek, P.R.J.J.o.b.i.: The role of explainability in
+     creating trustworthy artificial intelligence for health care: a comprehensive survey
+     of the terminology, design choices, and evaluation strategies 113, 103655 (2021)
+[16] Albahri, A.S., Duhaim, A.M., Fadhel, M.A., Alnoor, A., Baqer, N.S., Alzubaidi,
+     L., Albahri, O.S., Alamoodi, A.H., Bai, J., Salhi, A.J.I.f.: A systematic review
+     of trustworthy and explainable artificial intelligence in healthcare: Assessment of
+     quality, bias risk, and data fusion 96, 156–191 (2023)
+[17] Han, X., Hu, Y., Foschini, L., Chinitz, L., Jankelson, L., Ranganath, R.J.N.m.:
+     Deep learning models for electrocardiograms are susceptible to adversarial attack
+     26(3), 360–363 (2020)
+[18] Shao, J., Geng, S., Fu, Z., Xu, W., Liu, T., Hong, S.: Cardiodefense: defend-
+     ing against adversarial attack in ecg classification with adversarial distillation
+     training. Biomedical Signal Processing and Control 91, 105922 (2024)
+[19] Begoli, E., Bhattacharya, T., Kusnezov, D.J.N.M.I.: The need for uncertainty
+     quantification in machine-assisted medical decision making 1(1), 20–23 (2019)
+[20] De Chazal, P., O’Dwyer, M., Reilly, R.B.J.I.t.o.b.e.: Automatic classification of
+     heartbeats using ecg morphology and heartbeat interval features 51(7), 1196–1206
+     (2004)
+[21] Lin, T.-Y., Goyal, P., Girshick, R., He, K., Dollár, P.: Focal loss for dense object
+     detection. In: Proceedings of the IEEE International Conference on Computer
+     Vision, pp. 2980–2988
+[22] Moody, G.B., Mark, R.G.J.I.e.i.m., magazine, b.: The impact of the mit-bih
+     arrhythmia database 20(3), 45–50 (2001)
+
+
+
+
+                                           12
+

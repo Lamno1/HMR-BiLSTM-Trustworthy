@@ -1,14 +1,14 @@
 # preprocess.py
 
 """
-Tiền xử lý MIT-BIH ECG cho HMR-BiLSTM.
+Tiền xử lý MIT-BIH ECG cho ResMemECG.
 
 Các cải tiến quan trọng:
 1. ECG normalization
 2. Giữ statistics mean/std cho inference
 3. Class weights clipping an toàn hơn
 4. In thống kê normalization
-5. Pipeline ổn định hơn cho HMR-BiLSTM
+5. Pipeline ổn định hơn cho ResMemECG
 
 Cách chạy:
     python preprocess.py
@@ -178,7 +178,7 @@ def main():
     # STEP 5: RESHAPE FOR LSTM
     # =========================================================
 
-    print("\n[5/8] Reshaping sequences for HMR-BiLSTM...")
+    print("\n[5/8] Reshaping sequences for ResMemECG...")
 
     # LSTM input format:
     # (batch, timesteps, features)
