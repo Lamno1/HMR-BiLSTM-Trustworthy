@@ -1,7 +1,7 @@
-# ResMemECG: A Residual-Memory Recurrent Model for Inter-Patient ECG Arrhythmia Classification and Record-Grouped Rare-Class Evaluation
+# ResMemECG: A Residual-Memory Recurrent Model for Inter-Patient ECG Arrhythmia Classification and Subject-Grouped Rare-Class Evaluation
 
 > **Name history:** an earlier version of this work was presented at INDEA 2026
-> under the `HMR`&#8288;`-BiLSTM` name; the journal version is **ResMemECG**. The Python modules
+> under the `HMR`&#8288;`-BiLSTM` name (conference files are archived in `archive/conference_INDEA2026/`); the journal version is **ResMemECG**. The Python modules
 > (`hmr_bilstm.py` / `RLSTMClassifier`, `hmr_multipath.py` / `HMRMultiPath`) keep
 > their original identifiers; only the model/paper name and all human-readable
 > labels (docstrings, plot legends, table cells) were updated.
@@ -261,7 +261,7 @@ python train_rr_multiseed.py
 
 ## Keywords
 
-ECG Arrhythmia Classification, ResMemECG, Residual Memory Control, Record-Grouped Cross-Validation, Rare-Class Generalisation, Interpretable AI, Trustworthy AI, Adversarial Robustness, FGSM, PGD, AutoAttack, Calibration, Uncertainty Quantification, Inter-Patient Evaluation, MIT-BIH
+ECG Arrhythmia Classification, ResMemECG, Residual Memory Control, Subject-Grouped Cross-Validation, Rare-Class Generalisation, Interpretable AI, Trustworthy AI, Adversarial Robustness, FGSM, PGD, AutoAttack, Calibration, Uncertainty Quantification, Inter-Patient Evaluation, MIT-BIH
 
 ---
 
@@ -269,8 +269,8 @@ ECG Arrhythmia Classification, ResMemECG, Residual Memory Control, Record-Groupe
 
 ```bibtex
 @article{resmemecg_2026,
-  title={ResMemECG: A Residual-Memory Recurrent Model for Inter-Patient ECG Arrhythmia Classification and Record-Grouped Rare-Class Evaluation},
-  author={Nguyen, Quoc Hung and Luu Nguyen, Dai Phong and Tran, Khoi Nguyen and Le, Dang Tho and Le, My Phung and Nguyen, Van Thong},
+  title={ResMemECG: A Residual-Memory Recurrent Model for Inter-Patient ECG Arrhythmia Classification and Subject-Grouped Rare-Class Evaluation},
+  author={Nguyen, Van Thong and Luu Nguyen, Dai Phong and Tran, Khoi Nguyen and Le, Dang Tho and Nguyen, Thien Khoi and Nguyen, Manh Tuan},
   year={2026}
 }
 ```

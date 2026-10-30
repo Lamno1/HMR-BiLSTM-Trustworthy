@@ -136,3 +136,8 @@ TEN_EM_LA_GI.py
 # ---------- Local agent/tool state (not part of the project) ----------
 .codex/
 graphify-out/
+
+# ---------- Manuscript drafts (kept local, not published) ----------
+latex/sn-article.tex
+latex/manuscript.tex
+latex/mau1.bib
