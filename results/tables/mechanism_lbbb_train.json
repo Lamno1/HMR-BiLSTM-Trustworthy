@@ -1,0 +1,414 @@
+{
+  "train": {
+    "n_L": 3947,
+    "n_F": 384,
+    "L_by_record": {
+      "109": 2490,
+      "207": 1457
+    },
+    "F_by_record": {
+      "108": 2,
+      "109": 2,
+      "114": 4,
+      "201": 2,
+      "203": 1,
+      "208": 372,
+      "215": 1
+    },
+    "bilstm": [
+      {
+        "seed": 42,
+        "L_to_F": 1,
+        "F_recall": 0.9713541666666666,
+        "auc_F_vs_L": 0.9998403323199053,
+        "L_to_F_by_record": {
+          "109": 0,
+          "207": 1
+        }
+      },
+      {
+        "seed": 123,
+        "L_to_F": 3,
+        "F_recall": 0.9921875,
+        "auc_F_vs_L": 0.9999280835655773,
+        "L_to_F_by_record": {
+          "109": 2,
+          "207": 1
+        }
+      },
+      {
+        "seed": 456,
+        "L_to_F": 0,
+        "F_recall": 0.9947916666666666,
+        "auc_F_vs_L": 1.0,
+        "L_to_F_by_record": {
+          "109": 0,
+          "207": 0
+        }
+      }
+    ],
+    "bilstm_ce": [
+      {
+        "seed": 42,
+        "L_to_F": 0,
+        "F_recall": 0.9036458333333334,
+        "auc_F_vs_L": 0.99912512667849,
+        "L_to_F_by_record": {
+          "109": 0,
+          "207": 0
+        }
+      },
+      {
+        "seed": 123,
+        "L_to_F": 0,
+        "F_recall": 0.9921875,
+        "auc_F_vs_L": 0.9999808662697407,
+        "L_to_F_by_record": {
+          "109": 0,
+          "207": 0
+        }
+      },
+      {
+        "seed": 456,
+        "L_to_F": 0,
+        "F_recall": 0.9895833333333334,
+        "auc_F_vs_L": 0.9999940619457817,
+        "L_to_F_by_record": {
+          "109": 0,
+          "207": 0
+        }
+      }
+    ],
+    "bilstm_nocw": [
+      {
+        "seed": 42,
+        "L_to_F": 0,
+        "F_recall": 0.8359375,
+        "auc_F_vs_L": 0.9987978739126763,
+        "L_to_F_by_record": {
+          "109": 0,
+          "207": 0
+        }
+      },
+      {
+        "seed": 123,
+        "L_to_F": 0,
+        "F_recall": 0.8854166666666666,
+        "auc_F_vs_L": 0.9995203371759143,
+        "L_to_F_by_record": {
+          "109": 0,
+          "207": 0
+        }
+      },
+      {
+        "seed": 456,
+        "L_to_F": 0,
+        "F_recall": 0.9322916666666666,
+        "auc_F_vs_L": 0.9963520553585001,
+        "L_to_F_by_record": {
+          "109": 0,
+          "207": 0
+        }
+      }
+    ],
+    "normc": [
+      {
+        "seed": 42,
+        "L_to_F": 0,
+        "F_recall": 0.9427083333333334,
+        "auc_F_vs_L": 0.9935651285786673,
+        "L_to_F_by_record": {
+          "109": 0,
+          "207": 0
+        }
+      },
+      {
+        "seed": 123,
+        "L_to_F": 9,
+        "F_recall": 0.9895833333333334,
+        "auc_F_vs_L": 0.9999175270247446,
+        "L_to_F_by_record": {
+          "109": 0,
+          "207": 9
+        }
+      },
+      {
+        "seed": 456,
+        "L_to_F": 1,
+        "F_recall": 0.9921875,
+        "auc_F_vs_L": 0.9999953815133856,
+        "L_to_F_by_record": {
+          "109": 0,
+          "207": 1
+        }
+      }
+    ],
+    "full": [
+      {
+        "seed": 42,
+        "L_to_F": 0,
+        "F_recall": 0.9479166666666666,
+        "auc_F_vs_L": 0.9987840184528334,
+        "L_to_F_by_record": {
+          "109": 0,
+          "207": 0
+        }
+      },
+      {
+        "seed": 123,
+        "L_to_F": 0,
+        "F_recall": 0.9921875,
+        "auc_F_vs_L": 0.9999980206485938,
+        "L_to_F_by_record": {
+          "109": 0,
+          "207": 0
+        }
+      },
+      {
+        "seed": 456,
+        "L_to_F": 2,
+        "F_recall": 0.9791666666666666,
+        "auc_F_vs_L": 0.9996404178278862,
+        "L_to_F_by_record": {
+          "109": 0,
+          "207": 2
+        }
+      }
+    ],
+    "normc_nodrop": [
+      {
+        "seed": 42,
+        "L_to_F": 3,
+        "F_recall": 0.9791666666666666,
+        "auc_F_vs_L": 0.9999610727556795,
+        "L_to_F_by_record": {
+          "109": 2,
+          "207": 1
+        }
+      },
+      {
+        "seed": 123,
+        "L_to_F": 0,
+        "F_recall": 0.9791666666666666,
+        "auc_F_vs_L": 0.9999313824845875,
+        "L_to_F_by_record": {
+          "109": 0,
+          "207": 0
+        }
+      },
+      {
+        "seed": 456,
+        "L_to_F": 2,
+        "F_recall": 0.9817708333333334,
+        "auc_F_vs_L": 0.9999637118908876,
+        "L_to_F_by_record": {
+          "109": 0,
+          "207": 2
+        }
+      }
+    ],
+    "full_nodrop": [
+      {
+        "seed": 42,
+        "L_to_F": 0,
+        "F_recall": 0.9921875,
+        "auc_F_vs_L": 1.0,
+        "L_to_F_by_record": {
+          "109": 0,
+          "207": 0
+        }
+      },
+      {
+        "seed": 123,
+        "L_to_F": 0,
+        "F_recall": 0.9869791666666666,
+        "auc_F_vs_L": 1.0,
+        "L_to_F_by_record": {
+          "109": 0,
+          "207": 0
+        }
+      },
+      {
+        "seed": 456,
+        "L_to_F": 0,
+        "F_recall": 1.0,
+        "auc_F_vs_L": 1.0,
+        "L_to_F_by_record": {
+          "109": 0,
+          "207": 0
+        }
+      }
+    ]
+  },
+  "val": {
+    "n_L": 0,
+    "n_F": 30,
+    "L_by_record": {},
+    "F_by_record": {
+      "124": 5,
+      "205": 11,
+      "223": 14
+    },
+    "bilstm": [
+      {
+        "seed": 42,
+        "L_to_F": 0,
+        "F_recall": 0.1,
+        "auc_F_vs_L": null,
+        "L_to_F_by_record": {}
+      },
+      {
+        "seed": 123,
+        "L_to_F": 0,
+        "F_recall": 0.13333333333333333,
+        "auc_F_vs_L": null,
+        "L_to_F_by_record": {}
+      },
+      {
+        "seed": 456,
+        "L_to_F": 0,
+        "F_recall": 0.4,
+        "auc_F_vs_L": null,
+        "L_to_F_by_record": {}
+      }
+    ],
+    "bilstm_ce": [
+      {
+        "seed": 42,
+        "L_to_F": 0,
+        "F_recall": 0.03333333333333333,
+        "auc_F_vs_L": null,
+        "L_to_F_by_record": {}
+      },
+      {
+        "seed": 123,
+        "L_to_F": 0,
+        "F_recall": 0.06666666666666667,
+        "auc_F_vs_L": null,
+        "L_to_F_by_record": {}
+      },
+      {
+        "seed": 456,
+        "L_to_F": 0,
+        "F_recall": 0.13333333333333333,
+        "auc_F_vs_L": null,
+        "L_to_F_by_record": {}
+      }
+    ],
+    "bilstm_nocw": [
+      {
+        "seed": 42,
+        "L_to_F": 0,
+        "F_recall": 0.03333333333333333,
+        "auc_F_vs_L": null,
+        "L_to_F_by_record": {}
+      },
+      {
+        "seed": 123,
+        "L_to_F": 0,
+        "F_recall": 0.03333333333333333,
+        "auc_F_vs_L": null,
+        "L_to_F_by_record": {}
+      },
+      {
+        "seed": 456,
+        "L_to_F": 0,
+        "F_recall": 0.03333333333333333,
+        "auc_F_vs_L": null,
+        "L_to_F_by_record": {}
+      }
+    ],
+    "normc": [
+      {
+        "seed": 42,
+        "L_to_F": 0,
+        "F_recall": 0.0,
+        "auc_F_vs_L": null,
+        "L_to_F_by_record": {}
+      },
+      {
+        "seed": 123,
+        "L_to_F": 0,
+        "F_recall": 0.26666666666666666,
+        "auc_F_vs_L": null,
+        "L_to_F_by_record": {}
+      },
+      {
+        "seed": 456,
+        "L_to_F": 0,
+        "F_recall": 0.13333333333333333,
+        "auc_F_vs_L": null,
+        "L_to_F_by_record": {}
+      }
+    ],
+    "full": [
+      {
+        "seed": 42,
+        "L_to_F": 0,
+        "F_recall": 0.1,
+        "auc_F_vs_L": null,
+        "L_to_F_by_record": {}
+      },
+      {
+        "seed": 123,
+        "L_to_F": 0,
+        "F_recall": 0.26666666666666666,
+        "auc_F_vs_L": null,
+        "L_to_F_by_record": {}
+      },
+      {
+        "seed": 456,
+        "L_to_F": 0,
+        "F_recall": 0.03333333333333333,
+        "auc_F_vs_L": null,
+        "L_to_F_by_record": {}
+      }
+    ],
+    "normc_nodrop": [
+      {
+        "seed": 42,
+        "L_to_F": 0,
+        "F_recall": 0.23333333333333334,
+        "auc_F_vs_L": null,
+        "L_to_F_by_record": {}
+      },
+      {
+        "seed": 123,
+        "L_to_F": 0,
+        "F_recall": 0.16666666666666666,
+        "auc_F_vs_L": null,
+        "L_to_F_by_record": {}
+      },
+      {
+        "seed": 456,
+        "L_to_F": 0,
+        "F_recall": 0.03333333333333333,
+        "auc_F_vs_L": null,
+        "L_to_F_by_record": {}
+      }
+    ],
+    "full_nodrop": [
+      {
+        "seed": 42,
+        "L_to_F": 0,
+        "F_recall": 0.06666666666666667,
+        "auc_F_vs_L": null,
+        "L_to_F_by_record": {}
+      },
+      {
+        "seed": 123,
+        "L_to_F": 0,
+        "F_recall": 0.23333333333333334,
+        "auc_F_vs_L": null,
+        "L_to_F_by_record": {}
+      },
+      {
+        "seed": 456,
+        "L_to_F": 0,
+        "F_recall": 0.16666666666666666,
+        "auc_F_vs_L": null,
+        "L_to_F_by_record": {}
+      }
+    ]
+  }
+}

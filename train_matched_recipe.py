@@ -19,6 +19,13 @@ Multi-seed ablations, each changing exactly one thing:
   {full,bilstm}_{noadv,ce,nocw} : recipe ablations (no FGSM training / class-weighted
                                   cross-entropy instead of focal / focal without class weights).
   full_nosmooth                 : ResMemECG without the temporal-smoothness penalty.
+  reslstm / reslstm_ce          : stacked residual BiLSTM (h1 + h2 shortcut between the two
+                                  nn.LSTM layers), official recipe / cross-entropy.
+  normc_{nodrop,nofb,torchinit}  : No-RMC cell without its in-cell dropout / forget bias /
+                                  custom initialisation; normc_lstmlike removes dropout and
+                                  initialisation together (should approach bilstm if those
+                                  are the only differences).
+  full_nodrop                   : ResMemECG without the in-cell dropout (pairs with normc_nodrop).
 
 
 Resumable per epoch (the machine reboots).
@@ -74,6 +81,36 @@ def build_normc(cfg):
     return model
 
 
+def build_normc_variant(cell_dropout=True, forget_bias=True, custom_init=True):
+    """No-RMC cell with one of its differences from nn.LSTM removed.
+
+    cell_dropout=False: no dropout inside the cell (the dropped h_t otherwise feeds the
+        recurrence and the last layer's output); only the inter-layer dropout remains, as in nn.LSTM.
+    forget_bias=False : forget-gate biases of W_x and W_h set to 0 instead of 1 + 1.
+    custom_init=False : W_x and W_h re-initialised like nn.LSTM, U(-1/sqrt(H), 1/sqrt(H)) for
+        weights and biases (replaces orthogonal/xavier and the forget bias).
+    Re-initialisation draws from a forked RNG, so the rest of the run uses the same random
+    stream as normc with the same seed.
+    """
+    def build(cfg):
+        model = build_normc(cfg)
+        k = 1.0 / cfg["hidden_size"] ** 0.5
+        with torch.no_grad(), torch.random.fork_rng(devices=[]):
+            for layers in (model.birlstm.fwd_layers, model.birlstm.bwd_layers):
+                for layer in layers:
+                    cell, n = layer.cell, layer.cell.hidden_size
+                    if not cell_dropout:
+                        cell.dropout = nn.Identity()
+                    for lin in (cell.W_x, cell.W_h):
+                        if not custom_init:
+                            nn.init.uniform_(lin.weight, -k, k)
+                            nn.init.uniform_(lin.bias, -k, k)
+                        elif not forget_bias:
+                            lin.bias[n:2 * n].zero_()
+        return model
+    return build
+
+
 class BiLSTMControl(nn.Module):
     """ResMemECG with its recurrent trunk replaced by nn.LSTM; everything else identical."""
 
@@ -92,6 +129,27 @@ class BiLSTMControl(nn.Module):
     def forward(self, x, return_internals=False):
         h_seq, _ = self.lstm(self.cnn(x))
         pooled, attn = self.attention_pool(h_seq)
+        logits = self.classifier(self.dropout(self.layer_norm(pooled)))
+        if return_internals:
+            return logits, {"r_fwd": None, "r_bwd": None, "attention_weights": attn}
+        return logits
+
+
+class ResidualLSTMControl(BiLSTMControl):
+    """Stacked residual BiLSTM (Kim et al. 2017 style): two separate bidirectional nn.LSTM
+    layers whose outputs are added, h = h2 + h1; CNN, attention and head as in BiLSTMControl."""
+
+    def __init__(self, cfg):
+        super().__init__(cfg)
+        h, d = cfg["hidden_size"], cfg["dropout"]
+        self.lstm = nn.LSTM(cfg["cnn_out_channels"], h, bidirectional=True, batch_first=True)
+        self.lstm2 = nn.LSTM(2 * h, h, bidirectional=True, batch_first=True)
+        self.inter_dropout = nn.Dropout(d)   # nn.LSTM applies the same dropout between layers
+
+    def forward(self, x, return_internals=False):
+        h1, _ = self.lstm(self.cnn(x))
+        h2, _ = self.lstm2(self.inter_dropout(h1))
+        pooled, attn = self.attention_pool(h1 + h2)
         logits = self.classifier(self.dropout(self.layer_norm(pooled)))
         if return_internals:
             return logits, {"r_fwd": None, "r_bwd": None, "attention_weights": attn}
@@ -159,10 +217,24 @@ def build_meanpool(cfg):
     return model
 
 
+def build_full_nodrop(cfg):
+    """ResMemECG without the in-cell dropout, the counterpart of normc_nodrop."""
+    model = build_full(cfg)
+    for layers in (model.birlstm.fwd_layers, model.birlstm.bwd_layers):
+        for layer in layers:
+            layer.cell.dropout = nn.Identity()
+    return model
+
+
 BUILDERS = {"full": build_full, "normc": build_normc, "bilstm": BiLSTMControl,
             "nointer": lambda cfg: _swap_cells(build_full(cfg), NoInteractionCell),
             "nohybrid": lambda cfg: _swap_cells(build_full(cfg), NoHybridCell),
-            "meanpool": build_meanpool}
+            "meanpool": build_meanpool, "reslstm": ResidualLSTMControl,
+            "normc_nodrop": build_normc_variant(cell_dropout=False),
+            "normc_nofb": build_normc_variant(forget_bias=False),
+            "normc_torchinit": build_normc_variant(custom_init=False),
+            "normc_lstmlike": build_normc_variant(cell_dropout=False, custom_init=False),
+            "full_nodrop": build_full_nodrop}
 
 # Ablations: (builder, recipe override). Each changes exactly one thing.
 RECIPE_ABLATIONS = {
@@ -174,6 +246,7 @@ RECIPE_ABLATIONS = {
 ARCHS = {k: (k, {}) for k in BUILDERS}
 ARCHS.update({f"{b}_{r}": (b, o) for b in ("full", "bilstm") for r, o in RECIPE_ABLATIONS.items()
               if not (b == "bilstm" and r == "nosmooth")})
+ARCHS["reslstm_ce"] = ("reslstm", RECIPE_ABLATIONS["ce"])
 
 
 def class_weights(y, k):

@@ -32,6 +32,13 @@ ROWS = [
     ("bilstm_noadv", "bilstm", "BiLSTM, no FGSM training"),
     ("bilstm_ce", "bilstm", "BiLSTM, cross-entropy"),
     ("bilstm_nocw", "bilstm", "BiLSTM, no class weights"),
+    ("reslstm", "bilstm", "Residual BiLSTM"),
+    ("reslstm_ce", "bilstm_ce", "Residual BiLSTM, cross-entropy"),
+    ("normc_nodrop", "normc", "No-RMC, no in-cell dropout"),
+    ("normc_nofb", "normc", "No-RMC, forget bias 0"),
+    ("normc_torchinit", "normc", "No-RMC, \\texttt{nn.LSTM} initialisation"),
+    ("normc_lstmlike", "normc", "No-RMC, no in-cell dropout and \\texttt{nn.LSTM} initialisation"),
+    ("full_nodrop", "full", "ResMemECG, no in-cell dropout"),
 ]
 KEYS = ("macro_f1", "f1_S", "f1_V", "f1_F", "auc_F")
 
