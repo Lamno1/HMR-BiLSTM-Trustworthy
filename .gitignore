@@ -156,3 +156,18 @@ latex/cas-model2-names.bst
 latex/thumbnails/
 latex/*.abs
 latex/*.spl
+
+# paper and internal notes: kept locally, not in the code repository
+latex/
+archive/
+docs/JOURNAL_REVISION_HANDOFF.md
+docs/RENAME_PROVENANCE_AUDIT.md
+docs/RARE_CLASS_PROGRESS.md
+ACTIVE_PLAN.md
+RESEARCH_STATE.md
+EXPERIMENT_LOG.md
+E5_PROTOCOL.md
+AGENTS.md
+CLAUDE.md
+HMR-BiLSTM_Installation_Guide.docx
+sn-article-template/

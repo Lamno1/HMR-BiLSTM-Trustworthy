@@ -60,7 +60,6 @@ ResMemECG/
 │
 ├── results/                        # Figures, tables, logs (checkpoints git-ignored)
 ├── outputs/                        # Versioned run outputs (git-ignored)
-├── latex/                          # Paper source (sn-article.tex + figures)
 │
 ├── hmr_bilstm.py                   # Core model architecture + RLSTMLoss
 ├── hmr_bilstm_ablation.py          # Model with per-component ablation flags
@@ -243,7 +242,7 @@ The ablation study (`run_ablation.py`) and the RR-interval/SMOTE prototype exper
 | ECG-Transformer | 0.790 | 0.405 | 0.810 |
 | **ResMemECG (Ours)** | **0.931** | **0.628** | **0.953** |
 
-Full tables (ablation, FGSM/PGD/AutoAttack, calibration, noise robustness) are in `results/tables/` and `latex/sn-article.tex`. Macro F1/S/F remain the main open problem — see the paper's Limitations and Future Work.
+Full tables (ablation, FGSM/PGD/AutoAttack, calibration, noise robustness) are in `results/tables/`. Macro F1/S/F remain the main open problem.
 
 ---
 
