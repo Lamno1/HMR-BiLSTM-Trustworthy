@@ -1,9 +1,0 @@
-{
-  "n_params": 607115,
-  "test_auc": 0.9872087913834298,
-  "test_acc": 0.9505255527364987,
-  "test_f1_rong": 0.732615083251714,
-  "train_time_sec": 16701.57305264473,
-  "best_val_auc": 0.9850827581383925,
-  "logreg_val_auc_reference": 0.7306
-}

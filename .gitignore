@@ -40,8 +40,10 @@ desktop.ini
 .Spotlight-V100
 .Trashes
 
-# ---------- Data (large raw files only) ----------
-data/raw/
+# ---------- Local datasets and generated results ----------
+# Regenerate locally; do not version input data or experiment outputs.
+/data/
+/results/
 
 # ---------- Temporary / utility / logs ----------
 *.log
@@ -51,19 +53,9 @@ tempCodeRunnerFile.py
 *.ipynb_checkpoints
 .ipynb_checkpoints/
 
-# ---------- Results ----------
-# Allow pushing tables and figures, but ignore heavy checkpoints and raw runs
-results/checkpoints/
-# results/logs/
-# results/robustness/
-# results/ablation/
-
 # ---------- Models / Checkpoints ----------
 *.pt
 *.pth
-
-# ---------- Processed Data ----------
-data/processed/
 
 # ---------- Output Runs ----------
 outputs/
@@ -171,3 +163,17 @@ AGENTS.md
 CLAUDE.md
 HMR-BiLSTM_Installation_Guide.docx
 sn-article-template/
+
+# ---------- Exploratory architecture experiments (not part of the paper) ----------
+/camp_net*.py
+/dsta_*.py
+/ecg_fusion_*.py
+/hmr_dsta_*.py
+/hmr_hd.py
+/prototype_multibeat_context.py
+/rerun_dsta_fair.py
+/train_hd_ladder.py
+/test_hier_detach_hypothesis.py
+/test_ovr_small.py
+/test_sboost_small.py
+/test_synth_fusion_small.py
