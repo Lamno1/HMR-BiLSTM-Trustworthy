@@ -372,12 +372,14 @@ def main():
     ap.add_argument("--seeds", nargs="+", type=int, default=[42, 123, 456])
     ap.add_argument("--out-dir", default="results/matched_recipe")
     ap.add_argument("--smoke-batches", type=int, default=None)
+    ap.add_argument("--data-dir", default=str(DATA_DIR),
+                    help="split files; data/processed/splits_mlii = MLII by name for record 114")
     args = ap.parse_args()
     out_dir = Path(args.out_dir)
     out_dir.mkdir(parents=True, exist_ok=True)
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
     bs = CONFIG["batch_size"]
-    tr, va, te = (ECGDataset(DATA_DIR / f"inter_{s}.npz") for s in ("train", "val", "test"))
+    tr, va, te = (ECGDataset(Path(args.data_dir) / f"inter_{s}.npz") for s in ("train", "val", "test"))
     loaders = (DataLoader(tr, batch_size=bs, shuffle=True, num_workers=0),
                DataLoader(va, batch_size=bs, shuffle=False, num_workers=0),
                DataLoader(te, batch_size=bs, shuffle=False, num_workers=0))
