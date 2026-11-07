@@ -1,4 +1,4 @@
-# ResMemECG: A Residual-Memory Recurrent Model for Inter-Patient ECG Arrhythmia Classification and Subject-Grouped Rare-Class Evaluation
+# Weak Agreement Between Validation and Test Rankings of Recurrent ECG Classifiers: A Controlled, Subject-Grouped Evaluation
 
 > **Name history:** an earlier version of this work was presented at INDEA 2026
 > under the `HMR`&#8288;`-BiLSTM` name (conference files are archived in `archive/conference_INDEA2026/`); the journal version is **ResMemECG**. The Python modules
@@ -6,15 +6,31 @@
 > their original identifiers; only the model/paper name and all human-readable
 > labels (docstrings, plot legends, table cells) were updated.
 
-> **Git scope:** the repository contains project code and configuration. Datasets
-> and generated experiment results stay local and are ignored by Git. Exploratory
+> **Git scope:** the repository contains project code, configuration and a reviewed
+> aggregate-results snapshot in `paper_results/v1/`. Working datasets and experiment
+> output directories remain local. Exploratory
 > architecture branches not used in the paper (including DSTA-C, CAMP-Net and
 > hierarchical variants) are also kept local; the ResMemECG and paper-comparison
 > code remains in the repository.
 
+## Published results and manifests
+
+The versioned snapshot `paper_results/v1/` includes aggregate metrics from 129 runs,
+fold manifests, selected diagnostic tables and 729 numeric table values. The
+snapshot is published under tag `results-v1-2026-11-07`, with per-file SHA-256
+digests and a CC BY 4.0 license for the authored aggregate data and manifests.
+
+```bash
+python -m validation.check_bel_tables --public-snapshot paper_results/v1
+```
+
+This check runs from a fresh clone using the published aggregates. The snapshot
+README describes the metric definitions, provenance and coverage. Source ECG
+data are available through PhysioNet under their original distribution terms.
+
 ## Overview
 
-ResMemECG is a deep learning framework for ECG arrhythmia classification on the MIT-BIH Arrhythmia Database, evaluated under the strict **inter-patient** protocol (de Chazal et al., DS1/DS2), where no patient's beats appear in both training and test. The architecture targets three failure modes of plain LSTM baselines on this task: weak modelling of cell/hidden-state interaction, poor minority-class recall under extreme class imbalance, and no built-in way for a clinician to see why a beat was flagged.
+This repository contains code for a controlled evaluation of ResMemECG and matched recurrent ECG classifiers on MIT-BIH. The conventional DS1/DS2 split is record-disjoint but shares one subject through records 201 (DS1) and 202 (DS2). The separate MIT-BIH subject-grouped evaluation binds these records into one group. Results depend on the training recipe, cell implementation, seed and input protocol; the evaluated contrasts do not establish a consistent independent RMC benefit.
 
 ### Key Components
 
@@ -26,7 +42,7 @@ ResMemECG is a deep learning framework for ECG arrhythmia classification on the 
 - **Adversarial Training (FGSM):** improves robustness against adversarial perturbations at training time.
 - **Temporal Smoothness Regularization:** encourages stable residual gate trajectories across the recurrent loop.
 
-Beyond accuracy, the project includes a calibration study (ECE, Brier, MCE, NLL, per-class conditional ECE), uncertainty quantification (MC-Dropout, Deep Ensemble), adversarial robustness under FGSM/PGD/AutoAttack, Gaussian noise robustness, and SHAP/attention-based interpretability — all evaluated on the same inter-patient split as the headline classification numbers.
+Beyond accuracy, the project includes a calibration study (ECE, Brier, MCE, NLL, per-class conditional ECE), uncertainty quantification (MC-Dropout, Deep Ensemble), adversarial robustness under FGSM/PGD/AutoAttack, Gaussian noise robustness, and SHAP/attention-based interpretability — evaluated under the protocols specified for each analysis. Interpretability and referral analyses are exploratory and do not establish clinical utility.
 
 ---
 
@@ -38,7 +54,7 @@ The project uses the **MIT-BIH Arrhythmia Database**, downloaded directly from P
 - **DS2** (test): records `100, 103, 105, 111, 113, 117, 121, 123, 200, 202, 210, 212, 213, 214, 219, 221, 222, 228, 231, 232, 233, 234`
 - 4 DS1 records (`122, 124, 205, 223`) are held out for validation.
 
-This is a stricter, patient-disjoint evaluation and yields lower (but honest) numbers than intra-patient/random splits — see [Why inter-patient?](#why-inter-patient) below.
+This record-disjoint protocol limits within-record leakage but is not strictly patient-disjoint because of records 201/202 — see [Why inter-patient?](#why-inter-patient) below.
 
 ```bash
 python validation/download_mitdb.py       # downloads data/raw/mitdb/ from PhysioNet
@@ -47,7 +63,7 @@ python validation/preprocess_aami.py      # builds data/processed/splits/inter_{
 
 Each beat is a 187-sample window (90 before, 97 after the annotated R-peak), resampled to 125 Hz, Z-score normalised on training statistics only. Classes follow AAMI EC57 (N, S, V, F, Q).
 
-> **Note:** `data/`, `results/`, and `outputs/` are git-ignored (see `.gitignore`). Recreate data by running the preprocessing pipeline; generated results remain local.
+> **Note:** `data/`, `results/`, and `outputs/` are git-ignored (see `.gitignore`). Recreate data through the preprocessing pipeline. The reviewed publication snapshot is versioned separately in `paper_results/v1/`.
 
 ---
 

@@ -1,0 +1,51 @@
+{
+  "ss": {
+    "core": 0.006854503103022013,
+    "fold": 0.4816899484285116,
+    "core_x_fold": 0.02420750274304394,
+    "seed_within_cell": 0.054056603344526506
+  },
+  "ss_total": 0.5668085576191039,
+  "share": {
+    "core": 0.01209315387159036,
+    "fold": 0.8498282920283782,
+    "core_x_fold": 0.04270842847667698,
+    "seed_within_cell": 0.09537012562335485
+  },
+  "statsmodels_max_abs_diff": 8.881784197001252e-16,
+  "n_runs": 60,
+  "cores": [
+    "full",
+    "normc",
+    "normc_nodrop",
+    "bilstm",
+    "bilstm_nocw",
+    "bilstm_ce"
+  ],
+  "folds": [
+    0,
+    1,
+    2,
+    3,
+    4
+  ],
+  "seeds": [
+    42,
+    123
+  ],
+  "core_means": {
+    "full": 0.4746,
+    "normc": 0.4769,
+    "normc_nodrop": 0.4703,
+    "bilstm": 0.4486,
+    "bilstm_nocw": 0.4787,
+    "bilstm_ce": 0.4798
+  },
+  "fold_means": {
+    "0": 0.3713,
+    "1": 0.5154,
+    "2": 0.6107,
+    "3": 0.4817,
+    "4": 0.3784
+  }
+}

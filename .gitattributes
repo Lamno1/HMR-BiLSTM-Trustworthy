@@ -1,0 +1,2 @@
+# Preserve exact snapshot bytes so SHA-256 digests survive checkout on every OS.
+paper_results/** -text

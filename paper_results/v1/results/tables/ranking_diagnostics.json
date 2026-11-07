@@ -1,0 +1,68 @@
+{
+  "n_cells": 10,
+  "n_folds": 5,
+  "n_training_seeds": 2,
+  "mean_within_cell_rho": 0.08,
+  "within_cell_rho_range": [
+    -0.3142857142857143,
+    0.48571428571428577
+  ],
+  "val_pick_test_best": 2,
+  "tie_rule": "first core in fixed listed order",
+  "has_max_ties": false,
+  "mean_validation_regret": 0.016230683996114503,
+  "mean_uniform_random_expected_regret": 0.030136462945440957,
+  "mean_fixed_normc_regret": 0.024693096989381415,
+  "test_rank_cross_seed_rho_by_fold": {
+    "0": -0.2,
+    "1": -0.08571428571428573,
+    "2": -0.14285714285714288,
+    "3": 0.2571428571428572,
+    "4": 0.8285714285714287
+  },
+  "paired_seed_differences": {
+    "matched_recipe/full-normc": {
+      "seeds": [
+        42,
+        123,
+        456
+      ],
+      "differences": [
+        0.10789003626547988,
+        -0.052803099894330296,
+        0.013404845305251434
+      ],
+      "mean": 0.022830593892133672,
+      "sample_sd": 0.08076016688031394
+    },
+    "matched_recipe/full_nodrop-normc_nodrop": {
+      "seeds": [
+        42,
+        123,
+        456
+      ],
+      "differences": [
+        0.08376903219405052,
+        -0.04051840234208104,
+        -0.04866877686925086
+      ],
+      "mean": -0.001806049005760461,
+      "sample_sd": 0.0742221533169105
+    },
+    "matched_recipe_mlii/full-normc": {
+      "seeds": [
+        42,
+        123,
+        456
+      ],
+      "differences": [
+        0.005062929333453647,
+        0.06566113216085046,
+        0.037844201645929665
+      ],
+      "mean": 0.03618942104674459,
+      "sample_sd": 0.030332973322791158
+    }
+  },
+  "limits": "Descriptive on fixed cells/models. Does not resolve population rankings or estimate an interaction from interval inclusion."
+}

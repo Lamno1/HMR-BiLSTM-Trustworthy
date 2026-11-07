@@ -1,4 +1,4 @@
-"""Recompute BEL Tables 1, 3-8, own rows of Table 2 and the MLII supplement table
+"""Recompute BEL Tables 1, 3-8, own rows of Table 2 and MLII/ranking supplement tables
 from saved results and compare them with the LaTeX source.
 
 Sources (no retraining):
@@ -23,6 +23,7 @@ Exit code 1 if any cell or table shape fails.
 from __future__ import annotations
 
 import csv
+import hashlib
 import json
 import re
 import sys
@@ -36,6 +37,7 @@ TB = ROOT / "results" / "tables"
 FLAT = ROOT / "results" / "controlled_mit_subject_cv"
 SGCV = ROOT / "results" / "sgcv_arch"
 SEEDS = (42, 123, 456)
+PUBLIC_SNAPSHOT = False
 NUM = re.compile(r"[+-]?\d[\d,]*\.?\d*")
 
 
@@ -51,7 +53,13 @@ def table_rows(tex: str, label: str) -> list[list[float]]:
             continue
         cells = line.split("&")
         # Literature rows contain an input-description column (e.g. channel 0).
-        text = "&".join(cells[2:] if label == "tab:literature" else cells[1:])
+        if label == "tab:literature":
+            numeric_cells = cells[2:]
+        elif label in {"tab:ranking-val", "tab:ranking-test"}:
+            numeric_cells = cells  # The first column is a numeric fold identifier.
+        else:
+            numeric_cells = cells[1:]
+        text = "&".join(numeric_cells)
         text = re.sub(r"\\texttt\{[^}]*\}|\\beta_t=1|\$\{?\}?", " ", text).replace("\\,", "")
         text = text.replace("$-$", "-").replace("--", " ")
         rows.append([decimals(t) for t in NUM.findall(text.replace("$", ""))])
@@ -99,9 +107,13 @@ def expect_baselines():
         # All three ResMemECG rows now use matched-harness reruns.
         if name.startswith("ResMemECG_s"):
             seed = int(name.split("_s")[1])
-            with np.load(MR / f"full_seed{seed}_test_logits.npz") as d:
-                from sklearn.metrics import confusion_matrix
-                cm = confusion_matrix(d["y"], d["logits"].argmax(axis=1), labels=list(range(5)))
+            if PUBLIC_SNAPSHOT:
+                summary = json.loads((TB / "matched_diagnostics.json").read_text())
+                cm = summary["confusion_full"][str(seed)]
+            else:
+                with np.load(MR / f"full_seed{seed}_test_logits.npz") as d:
+                    from sklearn.metrics import confusion_matrix
+                    cm = confusion_matrix(d["y"], d["logits"].argmax(axis=1), labels=list(range(5)))
         else:
             cm = data[name]["confusion_NSVFQ"]
         cm = np.asarray(cm, dtype=float)
@@ -174,11 +186,21 @@ def expect_transfer():
 
 def fold_metrics(f, s):
     """Use all five classes in predictions, including Q false positives/negatives."""
-    from sklearn.metrics import precision_recall_fscore_support
-    with np.load(FLAT / f"fold{f}_seed{s}_flat_preds.npz") as d:
-        p, r, score, support = precision_recall_fscore_support(
-            d["y"], d["logits"].argmax(axis=1), labels=list(range(5)), zero_division=0)
     t = json.loads((FLAT / f"fold{f}_seed{s}_flat.json").read_text())["test_metrics"]
+    if PUBLIC_SNAPSHOT:
+        counts = json.loads((FLAT / f"fold{f}_seed{s}_flat.json").read_text())["confusion_NSVFQ"]
+        counts = np.asarray(counts, dtype=float)
+        support = counts.sum(axis=1)
+        predicted = counts.sum(axis=0)
+        true_positive = counts.diagonal()
+        p = np.divide(true_positive, predicted, out=np.zeros(5), where=predicted != 0)
+        r = np.divide(true_positive, support, out=np.zeros(5), where=support != 0)
+        score = np.divide(2 * p * r, p + r, out=np.zeros(5), where=p + r != 0)
+    else:
+        from sklearn.metrics import precision_recall_fscore_support
+        with np.load(FLAT / f"fold{f}_seed{s}_flat_preds.npz") as d:
+            p, r, score, support = precision_recall_fscore_support(
+                d["y"], d["logits"].argmax(axis=1), labels=list(range(5)), zero_division=0)
     out = {}
     for c in "SF":
         k = "NSVFQ".index(c)
@@ -239,14 +261,73 @@ CHECKS = [("tab:baselines", expect_baselines, None),
           ("tab:sgcv-folds", expect_sgcv_folds, None), ("tab:sgcv", expect_sgcv, None)]
 
 
+def expect_ranking_scores(partition):
+    """Read the original SG-CV summary, independently of the ranking audit."""
+    cores = ["full", "normc", "normc_nodrop", "bilstm", "bilstm_nocw", "bilstm_ce"]
+    with (TB / "sgcv_arch_runs.csv").open(newline="", encoding="utf-8") as handle:
+        scores = {
+            (row["core"], int(row["fold"]), int(row["seed"])): float(row[partition])
+            for row in csv.DictReader(handle)
+        }
+    return [[fold, seed, *[scores[core, fold, seed] for core in cores]]
+            for fold in range(5) for seed in (42, 123)]
+
+
+def check_public_snapshot(snapshot):
+    """Verify exact published bytes and recompute numeric tables from aggregates."""
+    global ROOT, MR, TB, FLAT, SGCV, PUBLIC_SNAPSHOT
+    snapshot = snapshot.resolve()
+    manifest = json.loads((snapshot / "manifest.json").read_text())
+    for entry in manifest["files"]:
+        path = (snapshot / entry["path"]).resolve()
+        if not path.is_relative_to(snapshot):
+            raise ValueError("Snapshot manifest path leaves its directory")
+        if hashlib.sha256(path.read_bytes()).hexdigest() != entry["sha256"]:
+            raise ValueError(f"Checksum mismatch for {entry['path']}")
+    ROOT = snapshot
+    MR = snapshot / "results/matched_recipe"
+    TB = snapshot / "results/tables"
+    FLAT = snapshot / "results/controlled_mit_subject_cv"
+    SGCV = snapshot / "results/sgcv_arch"
+    PUBLIC_SNAPSHOT = True
+    expected = json.loads((snapshot / "table_values.json").read_text())["tables"]
+    functions = {label: fn for label, fn, _ in CHECKS}
+    functions["tab:mlii-sensitivity"] = expect_mlii
+    functions["tab:ranking-val"] = lambda: expect_ranking_scores("inner_val_macro_f1")
+    functions["tab:ranking-test"] = lambda: expect_ranking_scores("outer_test_macro_f1")
+    count = 0
+    for label, fn in functions.items():
+        actual = fn()
+        reference = expected[label]["values"]
+        if len(actual) != len(reference):
+            raise ValueError(f"Row count mismatch for {label}")
+        for index, (row, saved) in enumerate(zip(actual, reference)):
+            if len(row) != len(saved) or not np.allclose(row, saved, rtol=0, atol=1e-12):
+                raise ValueError(f"Numeric mismatch for {label}, row {index + 1}")
+            count += len(row)
+        print(f"{label:22s} OK")
+    print(f"\n{len(manifest['files'])} file checksums verified; {count} values reproduced")
+
+
 def main():
+    if len(sys.argv) > 1 and sys.argv[1] == "--public-snapshot":
+        if len(sys.argv) != 3:
+            raise SystemExit("Usage: python -m validation.check_bel_tables --public-snapshot DIR")
+        check_public_snapshot(Path(sys.argv[2]))
+        return
     tex_path = Path(sys.argv[1]) if len(sys.argv) > 1 else ROOT / "latex" / "bel-article.tex"
     tex = tex_path.read_text(encoding="utf-8")
     n_ok = n_bad = 0
     checks = [(tex, label, fn) for label, fn, _ in CHECKS]
     supplement = ROOT / "latex" / "bel-supplement.tex"
     if supplement.exists():
-        checks.append((supplement.read_text(encoding="utf-8"), "tab:mlii-sensitivity", expect_mlii))
+        supplement_tex = supplement.read_text(encoding="utf-8")
+        checks.append((supplement_tex, "tab:mlii-sensitivity", expect_mlii))
+        for label, partition in [("tab:ranking-val", "inner_val_macro_f1"),
+                                 ("tab:ranking-test", "outer_test_macro_f1")]:
+            if f"\\label{{{label}}}" in supplement_tex:
+                checks.append((supplement_tex, label,
+                               lambda partition=partition: expect_ranking_scores(partition)))
     for source, label, fn in checks:
         printed, expected = table_rows(source, label), fn()
         if label == "tab:literature":
