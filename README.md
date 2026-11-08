@@ -1,300 +1,173 @@
-# Weak Agreement Between Validation and Test Rankings of Recurrent ECG Classifiers: A Controlled, Subject-Grouped Evaluation
+# ResMemECG — controlled ECG evaluation
 
-> **Name history:** an earlier version of this work was presented at INDEA 2026
-> under the `HMR`&#8288;`-BiLSTM` name (conference files are archived in `archive/conference_INDEA2026/`); the journal version is **ResMemECG**. The Python modules
-> (`hmr_bilstm.py` / `RLSTMClassifier`, `hmr_multipath.py` / `HMRMultiPath`) keep
-> their original identifiers; only the model/paper name and all human-readable
-> labels (docstrings, plot legends, table cells) were updated.
+**Study title** · *Weak Agreement Between Validation and Test Rankings of Recurrent ECG Classifiers: A Controlled, Subject-Grouped Evaluation*
 
-> **Git scope:** the repository contains project code, configuration and a reviewed
-> aggregate-results snapshot in `paper_results/v1/`. Working datasets and experiment
-> output directories remain local. Exploratory
-> architecture branches not used in the paper (including DSTA-C, CAMP-Net and
-> hierarchical variants) are also kept local; the ResMemECG and paper-comparison
-> code remains in the repository.
+This repository examines how training recipe, recurrent-cell implementation,
+random seed and input selection affect ECG classification on MIT-BIH. The public
+snapshot contains aggregate results from **129 runs**, exact fold manifests and
+the numerical inputs used for the main comparisons.
 
-## Published results and manifests
+## Start here
 
-Reviewers can follow [REPRODUCING.md](REPRODUCING.md) for a pinned CPU environment,
-table verification, selection diagnostics and figure regeneration.
+| What you want to do | Open or run |
+|---|---|
+| Check the reported numbers and regenerate the main diagnostic plots | Follow the quick start below, then run `python -m reviewer` |
+| Inspect exact train/validation/test records and N/S/V/F/Q counts | [Fold manifest](paper_results/v1/results/tables/sgcv_fold_manifest.csv) · [Record assignments](paper_results/v1/results/tables/sgcv_record_partition.csv) |
+| Find the data behind a table or figure | [Evidence map](docs/REPOSITORY_MAP.md#evidence-map) |
+| Read metric definitions and snapshot provenance | [Snapshot documentation](paper_results/v1/README.md) |
+| Recompute one analysis or train models | [Reproduction guide](REPRODUCING.md) |
+| Locate the architecture and training implementation | [Repository map](docs/REPOSITORY_MAP.md) |
 
-The versioned snapshot `paper_results/v1/` includes aggregate metrics from 129 runs,
-fold manifests, selected diagnostic tables and 729 numeric table values. The
-snapshot is published under tag `results-v1-2026-11-07`, with per-file SHA-256
-digests and a CC BY 4.0 license for the authored aggregate data and manifests.
+## Quick start on CPU
 
-```bash
-python -m validation.check_bel_tables --public-snapshot paper_results/v1
-```
-
-This check runs from a fresh clone using the published aggregates. The snapshot
-README describes the metric definitions, provenance and coverage. Source ECG
-data are available through PhysioNet under their original distribution terms.
-
-## Overview
-
-This repository contains code for a controlled evaluation of ResMemECG and matched recurrent ECG classifiers on MIT-BIH. The conventional DS1/DS2 split is record-disjoint but shares one subject through records 201 (DS1) and 202 (DS2). The separate MIT-BIH subject-grouped evaluation binds these records into one group. Results depend on the training recipe, cell implementation, seed and input protocol; the evaluated contrasts do not establish a consistent independent RMC benefit.
-
-Fusion-beat performance remains weak under subject-grouped evaluation, with
-mean F1-F at most 0.012 for the evaluated cores. Rare-F classification and
-referral utility remain open limitations of the tested pipelines.
-
-### Key Components
-
-- **Residual Memory Control (RMC):** an interaction-aware residual gate on top of the standard LSTM gates, splitting memory into "keep" and "add" streams combined via learned softmax attention.
-- **Hybrid Memory Path:** runs the RMC cell alongside a conventional LSTM through a learnable blend gate (initialised near-off), so training starts as a plain LSTM and only relies on RMC as gradients push it to.
-- **CNN Feature Extractor:** 1D convolutional front-end for local morphological feature extraction.
-- **Attention Pooling:** learnable temporal attention for sequence aggregation, doubling as a per-time-step interpretability signal.
-- **Focal Loss + Class Weights:** addresses severe class imbalance (N ≫ S, V, F, Q; ~97:1 on the training set).
-- **Adversarial Training (FGSM):** improves robustness against adversarial perturbations at training time.
-- **Temporal Smoothness Regularization:** encourages stable residual gate trajectories across the recurrent loop.
-
-Beyond accuracy, the project includes a calibration study (ECE, Brier, MCE, NLL, per-class conditional ECE), uncertainty quantification (MC-Dropout, Deep Ensemble), adversarial robustness under FGSM/PGD/AutoAttack, Gaussian noise robustness, and SHAP/attention-based interpretability — evaluated under the protocols specified for each analysis. Interpretability and referral analyses are exploratory and do not establish clinical utility.
-
----
-
-## Dataset
-
-The project uses the **MIT-BIH Arrhythmia Database**, downloaded directly from PhysioNet (not a pre-packaged CSV export), and split using the **inter-patient protocol**:
-
-- **DS1** (training + validation): records `101, 106, 108, 109, 112, 114, 115, 116, 118, 119, 122, 124, 201, 203, 205, 207, 208, 209, 215, 220, 223, 230`
-- **DS2** (test): records `100, 103, 105, 111, 113, 117, 121, 123, 200, 202, 210, 212, 213, 214, 219, 221, 222, 228, 231, 232, 233, 234`
-- 4 DS1 records (`122, 124, 205, 223`) are held out for validation.
-
-This record-disjoint protocol limits within-record leakage but is not strictly patient-disjoint because of records 201/202 — see [Why inter-patient?](#why-inter-patient) below.
+The verified environment is Windows with Python 3.13.2. Package versions,
+including dependencies, are pinned in [requirements-reproduce.txt](requirements-reproduce.txt).
+Run commands from the repository root.
 
 ```bash
-python validation/download_mitdb.py       # downloads data/raw/mitdb/ from PhysioNet
-python validation/preprocess_aami.py      # builds data/processed/splits/inter_{train,val,test}.npz
+git clone --depth 1 https://github.com/Lamno1/HMR-BiLSTM-Trustworthy.git
+cd HMR-BiLSTM-Trustworthy
 ```
 
-Each beat is a 187-sample window (90 before, 97 after the annotated R-peak), resampled to 125 Hz, Z-score normalised on training statistics only. Classes follow AAMI EC57 (N, S, V, F, Q).
+**PowerShell**
 
-> **Note:** `data/`, `results/`, and `outputs/` are git-ignored (see `.gitignore`). Recreate data through the preprocessing pipeline. The reviewed publication snapshot is versioned separately in `paper_results/v1/`.
-
----
-
-## Project Structure
-
-```
-ResMemECG/
-│
-├── data/
-│   ├── raw/                        # Raw PhysioNet MIT-BIH records (git-ignored)
-│   └── processed/                  # Inter-patient splits + class weights (git-ignored)
-│
-├── results/                        # Local generated figures, tables and logs (git-ignored)
-├── outputs/                        # Versioned run outputs (git-ignored)
-│
-├── hmr_bilstm.py                   # Core model architecture + RLSTMLoss
-├── hmr_bilstm_ablation.py          # Model with per-component ablation flags
-├── hmr_bilstm_rr.py                # Model variant with RR-interval side input (see Future Work)
-│
-├── train_inter_patient.py          # Main training script (inter-patient protocol)
-├── train_ensemble.py                # Trains extra seeds for the Deep Ensemble
-├── train_rr_prototype.py            # RR-interval / SMOTE prototype training (isolated experiment)
-├── train_rr_multiseed.py            # Multi-seed runner for the RR-interval prototype
-├── run_baselines.py                 # Trains Logistic Regression, Decision Tree, LSTM, BiLSTM, ResNet1D
-├── run_ablation.py                  # Ablation study driver (8 variants)
-├── run_ablation_inter.py            # Ablation study on the inter-patient split (subset)
-│
-├── preprocess.py                    # Legacy intra-patient preprocessing (see Why inter-patient?)
-├── train.py                         # Legacy intra-patient training script (see Why inter-patient?)
-│
-├── report_results.py                # Confusion matrix, ROC curve, gate trajectories, final table
-├── generate_results_tables.py       # Consolidated LaTeX/CSV summary tables + dashboard figure
-├── plot_case_visualization.py       # Per-class attention/gate case-study figures
-│
-├── evaluate_fgsm.py                  # FGSM robustness (single model / --compare across models)
-├── compare_fgsm_baselines.py         # FGSM robustness across all baselines
-├── evaluate_pgd.py                   # PGD-20 robustness
-├── evaluate_autoattack.py            # AutoAttack (torchattacks) on canonical + ablation checkpoints
-├── evaluate_autoattack_baselines.py  # AutoAttack comparison across LSTM/BiLSTM/ResMemECG
-├── evaluate_robustness_all.py        # Gaussian noise robustness sweep
-├── evaluate_calibration.py           # ECE / Brier / MCE / NLL / per-class conditional ECE
-├── evaluate_trustworthiness.py       # Consolidated trustworthiness dashboard (T8)
-│
-├── validation/
-│   ├── download_mitdb.py             # PhysioNet download
-│   ├── preprocess_aami.py            # Inter-patient (DS1/DS2) preprocessing — primary pipeline
-│   ├── preprocess_aami_rr.py         # Inter-patient preprocessing + RR-interval features
-│   └── apply_smote_rr.py             # SMOTE oversampling for the RR-interval prototype
-├── robustness/
-│   ├── auto_attack.py                # AutoAttack (pyautoattack) + gradient-masking check
-│   └── cw_attack.py                  # Carlini-Wagner L2 attack
-├── uncertainty/
-│   ├── mc_dropout.py                  # MC-Dropout uncertainty + OOD detection
-│   ├── deep_ensemble.py               # Deep Ensemble uncertainty + OOD detection
-│   └── evaluate_corruptions.py        # Synthetic corruption sweep
-├── explainability/
-│   ├── shap_analysis.py               # SHAP feature importance
-│   ├── integrated_gradients.py        # Integrated Gradients
-│   └── plot_disagreements.py          # SHAP/IG disagreement analysis
-├── calibration/
-│   ├── temperature_scaling.py         # Post-hoc temperature scaling
-│   ├── calibration_metrics.py         # ECE/Brier/MCE/NLL implementations
-│   └── reliability_diagram.py
-├── configs/
-│   └── paths.py                       # Run-ID / checkpoint-hash / output-path helpers
-│
-├── run_reproducible_pipeline.py       # Master orchestration script (see Usage)
-├── requirements.txt
-└── README.md
+```powershell
+python -m venv .venv
+.\.venv\Scripts\python.exe -m pip install -r requirements-reproduce.txt
+.\.venv\Scripts\python.exe -m pip check
+.\.venv\Scripts\python.exe -m reviewer
 ```
 
----
-
-## Installation
+**Bash on Linux or macOS**
 
 ```bash
-# Clone the repository
-git clone <RESMEMECG_REPOSITORY_URL>
-cd ResMemECG
-
-# Create and activate virtual environment (recommended)
-python -m venv venv
-venv\Scripts\activate        # Windows
-# source venv/bin/activate   # Linux/macOS
-
-# Install dependencies
-pip install -r requirements.txt
-
-# For GPU support (NVIDIA CUDA 12.1)
-pip install torch torchvision torchaudio --index-url https://download.pytorch.org/whl/cu121
+python3 -m venv .venv
+.venv/bin/python -m pip install -r requirements-reproduce.txt
+.venv/bin/python -m pip check
+.venv/bin/python -m reviewer
 ```
 
----
+The same entry point runs the table check, ranking analysis and figure export.
+Platform and package versions are recorded in the generated report.
 
-## Usage
-
-### Option A: Run the Complete Reproducible Pipeline
-
-```bash
-python run_reproducible_pipeline.py            # full run
-python run_reproducible_pipeline.py --dry-run  # print commands without executing
+```text
+outputs/reviewer/
+├── reviewer_report.json
+├── logs/
+│   ├── tables.txt
+│   ├── ranking.txt
+│   └── figures.txt
+├── ranking/
+│   ├── ranking_cells.csv
+│   └── ranking_diagnostics.json
+└── figures/
+    ├── confusion_matrix_seeds.{pdf,svg,png}
+    ├── transfer_auc.{pdf,svg,png}
+    └── validation_agreement.{pdf,svg,png}
 ```
 
-### Option B: Run Steps Manually
+### Expected checks
 
-#### 1. Data
-```bash
-python validation/download_mitdb.py
-python validation/preprocess_aami.py
+- **Tables** — `150 file checksums verified; 729 values reproduced`.
+- **Ranking** — diagnostic JSON matches the snapshot. Mean validation-selection
+  regret is approximately **0.016231**, compared with **0.030136** for uniform
+  random selection and **0.024693** for fixed No-RMC.
+- **Figures** — three plots exported as PDF, SVG and PNG.
+- **Report** — `outputs/reviewer/reviewer_report.json` finishes with `"status": "passed"`.
+
+Run a single task with `python -m reviewer --step tables`, `--step ranking` or
+`--step figures`. See [reviewer/](reviewer/README.md) for input/output options.
+
+## How the repository is organised
+
+```text
+HMR-BiLSTM-Trustworthy/
+├── README.md                       # Reviewer entry page
+├── REPRODUCING.md                  # Detailed commands and training paths
+├── requirements-reproduce.txt      # Pinned CPU verification environment
+├── requirements.txt                # Training and broader experiment dependencies
+├── reviewer/                       # Single entry point for the public checks
+│   ├── __main__.py
+│   └── README.md
+├── paper_results/v1/               # Versioned aggregate evidence
+│   ├── manifest.json               # File hashes and implementation provenance
+│   ├── SHA256SUMS
+│   ├── table_values.json            # 729 unrounded numeric table entries
+│   └── results/
+│       ├── matched_recipe/         # 20 configurations × 3 seeds
+│       ├── matched_recipe_mlii/    # 3 cores × 3 seeds
+│       ├── controlled_mit_subject_cv/  # Full model, 5 folds × 2 seeds
+│       ├── sgcv_arch/              # Five other cores on the same fold–seed cells
+│       ├── tables/                 # Fold manifests, ranking and transfer summaries
+│       └── p2_final/               # Selective-prediction aggregate diagnostics
+├── validation/                     # Preprocessing, protocols and analysis implementations
+├── docs/                           # Repository/evidence map and protocol descriptions
+├── hmr_bilstm.py                    # ResMemECG implementation, RLSTMClassifier
+├── train_inter_patient.py          # Official training recipe
+├── train_matched_recipe.py         # Architecture controls and paired-seed experiments
+├── configs/                        # Experiment configuration and path helpers
+├── calibration/                    # Calibration analyses
+├── explainability/                 # Attribution analyses
+├── robustness/                     # Perturbation evaluation
+├── selective/                      # Selective-prediction policy
+└── uncertainty/                    # Uncertainty analyses
 ```
 
-#### 2. Train ResMemECG (Proposed Model) and Baselines
-```bash
-python train_inter_patient.py     # ResMemECG, inter-patient protocol
-python run_baselines.py           # Logistic Regression, Decision Tree, LSTM, BiLSTM, ResNet1D
-```
+The tree highlights the public reviewer path and core implementation. The
+[full map](docs/REPOSITORY_MAP.md) identifies additional training and evaluation
+modules. Generated outputs are written to the ignored `outputs/` directory.
 
-#### 3. Ablation Study
-```bash
-python run_ablation.py                          # all 8 variants
-python run_ablation.py --variants no_rmc no_cnn # specific variants
-python run_ablation.py --table-only             # regenerate table from existing checkpoints
-```
-Variants: `full`, `no_rmc`, `no_cnn`, `mean_pool`, `no_interaction`, `no_hybrid`, `no_smooth`, `no_adv`.
+## Main results at a glance
 
-#### 4. Evaluation & Visualization
-```bash
-# Core figures: confusion matrix, ROC curve, gate trajectories, per-class case studies
-python report_results.py
-python plot_case_visualization.py
+Macro F1 is averaged over N/S/V/F. Q remains a fifth output and predictions into
+Q count as errors. Values below are mean macro F1 with sample SD.
 
-# Adversarial robustness
-python compare_fgsm_baselines.py
-python evaluate_pgd.py
-python evaluate_autoattack_baselines.py   # LSTM/BiLSTM/ResMemECG AutoAttack comparison
-python robustness/cw_attack.py
+| Evaluation | ResMemECG | No-RMC | Standard BiLSTM | Replicates used for SD |
+|---|---|---|---|---|
+| DS1/DS2, original channel-0 inputs | 0.559 (0.061) | 0.536 (0.045) | 0.473 (0.015) | Three training seeds |
+| DS1/DS2, MLII selected by name | 0.532 (0.014) | 0.496 (0.016) | 0.480 (0.011) | Three training seeds |
+| Subject-grouped CV | 0.475 (0.107) | 0.477 (0.112) | 0.449 (0.098) | Five fixed folds × two seeds |
 
-# Gaussian noise robustness
-python evaluate_robustness_all.py
+These comparisons use the matched harness. The source run files and table
+definitions are linked in the [evidence map](docs/REPOSITORY_MAP.md#evidence-map).
 
-# Calibration (reliability diagram, ECE, Brier, MCE, NLL)
-python evaluate_calibration.py
+### Interpretation boundaries
 
-# Uncertainty quantification
-python train_ensemble.py          # trains the extra Deep Ensemble members first
-python uncertainty/mc_dropout.py
-python uncertainty/deep_ensemble.py
+- The RMC contrast depends on implementation and input conditions. The
+  original-input no-dropout mean contrast is about −0.002. The MLII contrast is
+  about +0.036, with corresponding MLII no-dropout controls unavailable.
+- Fusion-beat generalisation remains weak. Mean F1-F under subject-grouped CV
+  is at most 0.012 across the evaluated cores.
+- Validation/test exact rankings agree weakly in these runs. Validation-based
+  selection still has lower observed regret than the two comparators above.
+- Record-bootstrap intervals condition on fitted models. The fixed-fold
+  summaries also depend on the chosen partition and training seeds.
 
-# Explainability
-python explainability/shap_analysis.py
-python explainability/integrated_gradients.py
+## Protocol details to check
 
-# Consolidated tables/figures and trustworthiness dashboard
-python generate_results_tables.py
-python evaluate_trustworthiness.py
-```
+| Item | Implementation and interpretation |
+|---|---|
+| DS1/DS2 | Record-disjoint. Records 201 and 202 belong to one subject and lie on opposite sides of this split |
+| Subject-grouped CV | Five folds over 43 groups from 44 retained records. Records 201/202 are bound together |
+| Record 208 | Outer-test in fold 0 and inner-validation in folds 1–4 |
+| Channel selection | Original channel 0 is V5 for record 114. The MLII sensitivity selects the lead by name and refits training normalization |
+| Rare-class support | Inspect N/S/V/F/Q counts before interpreting fold scores. Training N is capped at 37,208 per fold |
 
-> **Note (Windows/CUDA):** PGD/AutoAttack on the LSTM/BiLSTM baselines require the wrapped model to be temporarily switched to train mode for cuDNN's fused RNN backward kernel to work, while keeping Dropout/BatchNorm deterministic — handled automatically via `enter_deterministic_rnn_train_mode()` in `robustness/auto_attack.py`.
+See the [controlled protocol](docs/CONTROLLED_MIT_SUBJECT_CV_PROTOCOL.md) and
+[fold manifest](paper_results/v1/results/tables/sgcv_fold_manifest.csv).
 
-<a id="why-inter-patient"></a>
-### Why inter-patient? (and what `train.py`/`preprocess.py` are)
+## Data, versions and attribution
 
-An earlier iteration of this project used a **stratified intra-patient split** (`preprocess.py`, reading a Kaggle-style pre-split CSV export of MIT-BIH, and `train.py`), where beats from the same patient could appear in both train and test. That version reported substantially higher numbers (macro F1 ≈ 0.88) than the current inter-patient pipeline (macro F1 ≈ 0.63). This is expected: single-lead ECG morphology is highly patient-specific, so a model can partly "recognise the patient" rather than the arrhythmia when patient-level leakage is present. We kept `train.py`/`preprocess.py` in the repository for transparency and reproducibility of that earlier number (it is discussed explicitly in the paper's Discussion section), but **`train_inter_patient.py` + `validation/preprocess_aami.py` is the pipeline that produces every result reported as final in the paper.**
+The aggregate snapshot is pinned by tag
+[`results-v1-2026-11-07`](https://github.com/Lamno1/HMR-BiLSTM-Trustworthy/tree/results-v1-2026-11-07/paper_results/v1).
+Its authored aggregate files and manifests use [CC BY 4.0](paper_results/v1/DATA_LICENSE.md).
+The manifest records the model implementation commit and original artifact hashes.
+The reviewer report records the code commit actually executed.
 
----
+Original ECG recordings are available from
+[PhysioNet MIT-BIH](https://physionet.org/content/mitdb/1.0.0/).
+Full training uses those recordings and the preprocessing/training commands in
+[REPRODUCING.md](REPRODUCING.md#training-from-source-data).
 
-## Reproducibility & Consistency
-
-### Strict Seed Control
-Scripts use a fixed seed (`42` by default) for `numpy.random`, `torch.manual_seed`, and data shufflers so that partitions, weight initialisation, and sample selection are reproducible.
-
-### Deterministic CUDA execution
-```python
-torch.backends.cudnn.deterministic = True
-torch.backends.cudnn.benchmark = False
-```
-
-### Known single-seed limitations
-The ablation study (`run_ablation.py`) and the RR-interval/SMOTE prototype experiments are currently **single-seed** unless run through `run_ablation.py`'s multi-seed variants or `train_rr_multiseed.py`. Two ablation components (the interaction term and the temporal-smoothness penalty) show an inconclusive effect in the single-seed run — see the paper's Limitations for details. Minor floating-point differences across GPU architectures/PyTorch versions are expected regardless of seeding.
-
----
-
-## Results (inter-patient DS2 test set, 49,669 beats)
-
-| Model | Accuracy | Macro F1 | Macro AUC |
-|---|---|---|---|
-| Logistic Regression | 0.568 | 0.320 | 0.716 |
-| Decision Tree | 0.805 | 0.376 | 0.621 |
-| LSTM | 0.832 | 0.434 | 0.863 |
-| BiLSTM | 0.851 | 0.433 | 0.833 |
-| ResNet1D | 0.869 | 0.437 | 0.831 |
-| InceptionTime | 0.849 | 0.431 | 0.915 |
-| TCN | 0.837 | 0.452 | 0.919 |
-| ECG-Transformer | 0.790 | 0.405 | 0.810 |
-| **ResMemECG (Ours)** | **0.931** | **0.628** | **0.953** |
-
-Generated tables and figures are written under `results/` locally and are not tracked by Git. Macro F1/S/F remain the main open problem.
-
----
-
-## Future Work: RR-Interval Features & SMOTE
-
-`hmr_bilstm_rr.py`, `train_rr_prototype.py`, `train_rr_multiseed.py`, `validation/preprocess_aami_rr.py`, and `validation/apply_smote_rr.py` implement a follow-up experiment (kept isolated from the main pipeline, not used for the paper's headline numbers): adding patient-relative RR-interval features robustly improves Supraventricular-class F1 across multiple seeds, but every configuration tried also degraded Fusion-class F1, consistent with Fusion being a morphological blend of Normal and Ventricular beats rather than an independently learnable class. See the paper's Discussion for the full analysis.
-
-```bash
-python validation/preprocess_aami_rr.py
-python train_rr_prototype.py --data-dir data/processed/splits_rr
-python train_rr_multiseed.py
-```
-
----
-
-## Keywords
-
-ECG Arrhythmia Classification, ResMemECG, Residual Memory Control, Subject-Grouped Cross-Validation, Rare-Class Generalisation, Interpretable AI, Trustworthy AI, Adversarial Robustness, FGSM, PGD, AutoAttack, Calibration, Uncertainty Quantification, Inter-Patient Evaluation, MIT-BIH
-
----
-
-## Citation
-
-```bibtex
-@article{resmemecg_2026,
-  title={ResMemECG: A Residual-Memory Recurrent Model for Inter-Patient ECG Arrhythmia Classification and Subject-Grouped Rare-Class Evaluation},
-  author={Nguyen, Van Thong and Luu Nguyen, Dai Phong and Tran, Khoi Nguyen and Le, Dang Tho and Nguyen, Thien Khoi and Nguyen, Manh Tuan},
-  year={2026}
-}
-```
+When citing or reporting a reproduction, record the study title, repository URL,
+code commit, snapshot tag and environment from `reviewer_report.json`.
