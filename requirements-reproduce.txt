@@ -1,0 +1,17 @@
+# Verified CPU environment on Windows with Python 3.13.2.
+cloudpickle==3.1.2
+contourpy==1.4.0
+cycler==0.12.1
+fonttools==4.68.0
+joblib==1.6.0
+kiwisolver==1.5.1
+matplotlib==3.10.3
+numpy==2.4.4
+packaging==26.3
+pillow==13.0.0
+pyparsing==3.3.3
+python-dateutil==4.0.0
+scikit-learn==1.7.1
+scipy==1.16.0
+threadpoolctl==3.8.0
+tzdata==2026.6

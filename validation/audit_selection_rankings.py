@@ -4,6 +4,7 @@ Run with ``python -m validation.audit_selection_rankings``. Outputs are written
 to results/tables. The script reads summaries without training or inference.
 """
 from pathlib import Path
+import argparse
 import csv
 import json
 
@@ -16,7 +17,15 @@ CORES = ["full", "normc", "normc_nodrop", "bilstm", "bilstm_nocw", "bilstm_ce"]
 
 
 def main():
-    with (TABLES / "sgcv_arch_runs.csv").open(newline="", encoding="utf-8") as handle:
+    parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument("--results-dir", type=Path, default=ROOT / "results")
+    parser.add_argument("--out-dir", type=Path, default=TABLES)
+    args = parser.parse_args()
+    source_tables = args.results_dir / "tables"
+    if args.out_dir.resolve().is_relative_to((ROOT / "paper_results").resolve()):
+        raise ValueError("Write derived files outside the versioned snapshot")
+    args.out_dir.mkdir(parents=True, exist_ok=True)
+    with (source_tables / "sgcv_arch_runs.csv").open(newline="", encoding="utf-8") as handle:
         rows = list(csv.DictReader(handle))
     scores = {
         (row["core"], int(row["fold"]), int(row["seed"])):
@@ -72,7 +81,7 @@ def main():
         for seed in (42, 123, 456):
             metrics = []
             for core in (first, second):
-                path = ROOT / "results" / source / f"{core}_seed{seed}.json"
+                path = args.results_dir / source / f"{core}_seed{seed}.json"
                 metrics.append(json.loads(path.read_text())["test"]["f1_macro"])
             differences.append(metrics[0] - metrics[1])
         result["paired_seed_differences"][f"{source}/{first}-{second}"] = {
@@ -84,8 +93,8 @@ def main():
         "Descriptive on fixed cells/models. Does not resolve population rankings "
         "or estimate an interaction from interval inclusion."
     )
-    (TABLES / "ranking_diagnostics.json").write_text(json.dumps(result, indent=2), encoding="utf-8")
-    with (TABLES / "ranking_cells.csv").open("w", newline="", encoding="utf-8") as handle:
+    (args.out_dir / "ranking_diagnostics.json").write_text(json.dumps(result, indent=2), encoding="utf-8")
+    with (args.out_dir / "ranking_cells.csv").open("w", newline="", encoding="utf-8") as handle:
         writer = csv.DictWriter(handle, fieldnames=list(cells[0]))
         writer.writeheader()
         writer.writerows(cells)

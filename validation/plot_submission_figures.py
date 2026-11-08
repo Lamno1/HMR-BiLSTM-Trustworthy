@@ -35,9 +35,9 @@ def main():
     args = parser.parse_args()
     args.out_dir.mkdir(parents=True, exist_ok=True)
     plt.rcParams.update({"font.family": "sans-serif", "font.sans-serif": ["Arial", "DejaVu Sans"],
-                         "font.size": 7.5, "axes.titlesize": 8, "axes.labelsize": 7.5,
-                         "xtick.labelsize": 7, "ytick.labelsize": 7,
-                         "pdf.fonttype": 42, "svg.fonttype": "none", "legend.fontsize": 6.5})
+                         "font.size": 8, "axes.titlesize": 9, "axes.labelsize": 8,
+                         "xtick.labelsize": 8, "ytick.labelsize": 8,
+                         "pdf.fonttype": 42, "svg.fonttype": "none", "legend.fontsize": 8})
     require_matplotlib_panel_alignment = None
     if args.qa_tools:
         sys.path.insert(0, str(args.qa_tools))
@@ -64,7 +64,7 @@ def main():
         for i in range(5):
             for j in range(5):
                 ax.text(j, i, f"{counts[i,j]}\n{fractions[i,j]:.2f}", ha="center", va="center",
-                        fontsize=6.5, color="white" if fractions[i,j] > .6 else "black")
+                        fontsize=8, color="white" if fractions[i,j] > .6 else "black")
         ax.set_xticks(range(5), ["N", "S", "V", "F", "Q"])
         ax.set_yticks(range(5), ["N", "S", "V", "F", "Q"])
         ax.set_xlabel("Predicted"); ax.set_ylabel("True")
@@ -75,7 +75,7 @@ def main():
     order = ["bilstm", "bilstm_ce", "bilstm_nocw", "reslstm", "normc_lstmlike",
              "normc_torchinit", "normc_nofb", "normc", "normc_nodrop", "full", "full_nodrop"]
     fig, ax = plt.subplots(figsize=(111.13 / 25.4, 108 / 25.4))
-    fig.subplots_adjust(left=.46, right=.98, bottom=.15, top=.98)
+    fig.subplots_adjust(left=.46, right=.98, bottom=.15, top=.82)
     for part, name, marker, color, offset in [
         ("train", "DS1 train", "o", ".15", -.2),
         ("val", "DS1 validation", "s", "tab:orange", 0),
@@ -87,7 +87,7 @@ def main():
     ax.set_yticks(range(len(order)), [LABEL[a] for a in order]); ax.invert_yaxis()
     ax.axvline(.5, color=".7", lw=.6, ls="--"); ax.set_xlim(.45, 1.01)
     ax.set_xlabel("F-versus-N AUC\n(F-vs-rest logit margin)")
-    ax.legend(loc="lower left", fontsize=6.5, frameon=True, facecolor="white", framealpha=1)
+    ax.legend(loc="lower left", bbox_to_anchor=(0, 1.02), fontsize=8, frameon=False)
     save(fig, "transfer_auc")
 
     ds2 = json.loads((args.tables_dir / "ds2_validation_blindness.json").read_text())
@@ -114,7 +114,7 @@ def main():
     b.set_xlabel("Inner-validation macro F1 minus cell mean")
     b.set_ylabel("Outer-test macro F1 minus cell mean")
     b.set_title("(b) SG-CV: 6 cores, mean within-cell Spearman 0.08")
-    b.legend(loc="lower right",fontsize=6.5,frameon=True,facecolor="white",framealpha=1)
+    b.legend(loc="lower right",fontsize=8,frameon=True,facecolor="white",framealpha=1)
     save(fig, "validation_agreement")
 
 

@@ -15,6 +15,9 @@
 
 ## Published results and manifests
 
+Reviewers can follow [REPRODUCING.md](REPRODUCING.md) for a pinned CPU environment,
+table verification, selection diagnostics and figure regeneration.
+
 The versioned snapshot `paper_results/v1/` includes aggregate metrics from 129 runs,
 fold manifests, selected diagnostic tables and 729 numeric table values. The
 snapshot is published under tag `results-v1-2026-11-07`, with per-file SHA-256
@@ -31,6 +34,10 @@ data are available through PhysioNet under their original distribution terms.
 ## Overview
 
 This repository contains code for a controlled evaluation of ResMemECG and matched recurrent ECG classifiers on MIT-BIH. The conventional DS1/DS2 split is record-disjoint but shares one subject through records 201 (DS1) and 202 (DS2). The separate MIT-BIH subject-grouped evaluation binds these records into one group. Results depend on the training recipe, cell implementation, seed and input protocol; the evaluated contrasts do not establish a consistent independent RMC benefit.
+
+Fusion-beat performance remains weak under subject-grouped evaluation, with
+mean F1-F at most 0.012 for the evaluated cores. Rare-F classification and
+referral utility remain open limitations of the tested pipelines.
 
 ### Key Components
 
